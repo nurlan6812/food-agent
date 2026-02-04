@@ -25,11 +25,30 @@ SYSTEM_PROMPT = """당신은 한국 음식 전문가 AI 어시스턴트입니다
 - 추측하지 말고 도구 결과를 기반으로 답변하세요
 - 도구 결과를 그대로 전달하지 말고, 핵심만 구조화해서 답변하세요
 - 한국어로 자연스럽게 대화하고 이모지를 적절히 사용하세요
+- 응답은 보기 좋고 읽기 쉽게 작성하세요 (섹션 구분, 적절한 강조, 시각적 계층 구조 활용)
 
 ## 도구 사용
 - search_food_by_image: 현재 메시지에 새 이미지가 있을 때만 사용
 - 이전 대화에서 이미 이미지 검색을 했다면 그 결과를 활용하세요
 - 후속 질문은 search_restaurant_info 등 다른 도구 사용
+
+## 새 이미지 저장 (중요!)
+1. search_food_by_image 호출 후, [검색 결과 이미지]의 썸네일들과 원본 이미지를 비교
+2. 비교 기준:
+   - "아예 똑같은 이미지" 또는 "원본을 자른/크롭한 이미지" → 웹에 있는 이미지
+   - "비슷해 보이는 다른 음식 사진" → 새 이미지 (다른 사람이 찍은 비슷한 음식)
+3. 웹에 없는 새 이미지면:
+   - save_food_image 호출 (food_name은 AI 추론값으로)
+   - 반환된 image_id를 기억
+4. 똑같거나 자른 이미지가 있으면 → 저장 안함
+
+## 검증 정보 업데이트
+- 사용자가 확인해준 정보만 update_food_image로 업데이트
+- 음식 이름 확인 → food_name 전달 → food_verified=true
+- 식당 이름 확인 → restaurant_name 전달 → restaurant_verified=true
+- 집에서 만든 경우: source_type="home_cooked"
+- image_id는 save_food_image에서 받은 값 사용
+- 부분 검증 가능 (음식만 확인, 식당은 나중에)
 
 ## 이미지 분석 응답
 - 음식 이름만 물으면: "~음식으로 보입니다" + 식당이 보이면 "혹시 OO에서 드셨나요?"
@@ -43,6 +62,10 @@ SYSTEM_PROMPT = """당신은 한국 음식 전문가 AI 어시스턴트입니다
 - [MAP:...]: 위치/맛집 질문일 때 도구 결과의 태그를 수정 없이 그대로 복사해서 응답 끝에 포함
 - 🗺️ 지도 링크: 식당별로 [카카오맵](URL) 텍스트 링크로 포함
 - 중요: 응답에서 언급한 식당 개수와 [MAP:] 태그의 식당 개수가 반드시 일치해야 함
+
+## URL 사용 규칙 (매우 중요!)
+- 카카오맵 링크는 반드시 도구 결과에 있는 URL(http://place.map.kakao.com/...)만 사용
+- 절대로 URL을 추측하거나 만들어내지 마세요
 """
 
 
@@ -65,12 +88,14 @@ def get_llm(provider: Optional[str] = None, model_name: Optional[str] = None) ->
             model=model_name or settings.openai_model,
             api_key=settings.openai_api_key,
             temperature=0.7,
+            streaming=True,  # 🔥 실시간 스트리밍 활성화
         )
     elif provider == "gemini" or provider == ModelProvider.GEMINI:
         return ChatGoogleGenerativeAI(
             model=model_name or settings.gemini_model,
             google_api_key=settings.google_api_key,
             temperature=0.7,
+            streaming=True,  # 🔥 실시간 스트리밍 활성화
         )
     else:
         raise ValueError(f"지원하지 않는 모델 제공자: {provider}")
@@ -164,7 +189,7 @@ def create_multimodal_content(message: str, image_paths: List[str]) -> List[Dict
     텍스트와 이미지를 포함한 멀티모달 콘텐츠를 생성합니다.
 
     Args:
-        message: 텍스트 메시지
+        message: 텍스트 메시지 (이미지 경로 포함)
         image_paths: 이미지 경로 리스트
 
     Returns:
@@ -184,7 +209,7 @@ def create_multimodal_content(message: str, image_paths: List[str]) -> List[Dict
                 }
             })
 
-    # 텍스트 추가
+    # 텍스트 추가 (경로 유지 - 도구에서 사용)
     content.append({
         "type": "text",
         "text": message
@@ -227,9 +252,11 @@ class KoreanFoodAgent:
     def _prepare_message(self, message: str) -> HumanMessage:
         """메시지를 HumanMessage로 변환 (이미지 포함 가능)."""
         image_paths = extract_image_paths(message)
+
         if image_paths:
             content = create_multimodal_content(message, image_paths)
             return HumanMessage(content=content)
+
         return HumanMessage(content=message)
 
     def chat(self, message: str) -> str:
@@ -277,7 +304,7 @@ class KoreanFoodAgent:
         for chunk in self.agent.stream(
             {"messages": [human_message]},
             config=self._get_config(),
-            stream_mode="messages"
+            stream_mode=["messages", "custom"]  # custom 이벤트 활성화
         ):
             yield chunk
 

@@ -106,7 +106,7 @@ export function MapEmbed({ url }: MapEmbedProps) {
 
   useEffect(() => {
     if (places.length === 0) {
-      setError('좌표를 파싱할 수 없습니다');
+      // 좌표가 없으면 조용히 아무것도 표시하지 않음
       return;
     }
 

@@ -1,135 +1,289 @@
-# 🍜 Korean Food Agent
+# Korean Food Agent 🍜
 
-한국 음식 도메인 특화 AI 에이전트 - LangGraph 기반, GPT-5/Gemini 3 지원
+LangGraph + Gemini 기반 한국 음식 AI 에이전트
 
-## 주요 기능
+음식 이미지를 분석하고, 식당 정보를 검색하며, 레시피와 영양정보를 제공하는 멀티모달 AI 에이전트입니다.
 
-- 🔍 **레시피 검색**: 음식명 또는 재료로 레시피 검색
-- 🥗 **재료 기반 추천**: 보유 재료로 만들 수 있는 음식 추천
-- 📊 **영양 정보**: 칼로리, 단백질 등 영양 성분 조회
-- 📅 **식단 계획**: 목표에 맞는 주간 식단 생성
-- 👨‍🍳 **조리 가이드**: 단계별 조리법 안내
-- 🔄 **재료 대체**: 대체 가능한 재료 추천
+## ✨ 주요 기능
 
-## 설치
+| 기능 | 설명 | 도구 |
+|------|------|------|
+| 🔍 **음식 이미지 인식** | Google Lens로 음식/식당 파악 | `search_food_by_image` |
+| 🏪 **식당 검색** | 카카오맵 API + Playwright 크롤링으로 식당 정보 및 메뉴 조회 | `search_restaurant_info` |
+| 📝 **후기 분석** | 카카오맵 후기 크롤링 및 AI 요약 | `get_restaurant_reviews` |
+| 🍳 **레시피 검색** | 만개의레시피 등에서 크롤링 | `search_recipe_online` |
+| 📊 **영양정보** | 칼로리, 단백질 등 영양성분 검색 | `get_nutrition_info` |
+| 💾 **이미지 수집** | 새 음식 이미지 Supabase DB 저장 | `save_food_image`, `update_food_image` |
 
-```bash
-# 저장소 클론
-cd food_agent
+## 🛠️ 기술 스택
 
-# 가상환경 생성 (권장)
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate  # Windows
+### Backend
+| 레이어 | 기술 | 설명 |
+|--------|------|------|
+| **LLM** | Gemini 2.0 Flash | 멀티모달 언어 모델 |
+| **에이전트** | LangGraph | ReAct 패턴 구현 |
+| **메모리** | MemorySaver | 대화 히스토리 자동 관리 |
+| **API** | FastAPI | 스트리밍 지원 백엔드 |
+| **DB** | Supabase | PostgreSQL + Storage |
+| **크롤링** | Playwright | 동적 웹 크롤링 |
 
-# 의존성 설치
-pip install -r requirements.txt
-```
+### Frontend
+- **Framework**: Next.js 16 (React 19)
+- **Styling**: Tailwind CSS
+- **UI Components**: shadcn/ui, Radix UI
+- **Map**: 카카오맵 JavaScript SDK
 
-## 설정
+### External APIs
+- **Google Lens**: Serper.dev (이미지 검색)
+- **Kakao Local API**: 식당 검색
+- **Web Search**: Serper.dev (텍스트 검색)
 
-`.env.example`을 `.env`로 복사하고 API 키를 설정하세요:
-
-```bash
-cp .env.example .env
-```
-
-```env
-# OpenAI API Key (GPT-5 사용시)
-OPENAI_API_KEY=your-openai-api-key
-
-# Google AI API Key (Gemini 사용시)
-GOOGLE_API_KEY=your-google-api-key
-
-# 기본 모델 제공자 (openai 또는 gemini)
-MODEL_PROVIDER=openai
-```
-
-## 사용법
-
-### CLI 실행
-
-```bash
-python -m src.main
-```
-
-### Python 코드에서 사용
-
-```python
-from src.agent import KoreanFoodAgent
-
-# 에이전트 생성 (기본 설정 사용)
-agent = KoreanFoodAgent()
-
-# 또는 특정 모델 지정
-agent = KoreanFoodAgent(provider="openai", model_name="gpt-5.2")
-
-# 대화
-response = agent.chat("김치찌개 레시피 알려줘")
-print(response)
-
-# 모델 전환
-agent.switch_model("gemini", "gemini-3-pro-preview")
-```
-
-### 비동기 사용
-
-```python
-import asyncio
-from src.agent import KoreanFoodAgent
-
-async def main():
-    agent = KoreanFoodAgent()
-    response = await agent.achat("비빔밥 칼로리가 얼마야?")
-    print(response)
-
-asyncio.run(main())
-```
-
-## 지원 모델
-
-| 제공자 | 모델 | 설정값 |
-|--------|------|--------|
-| OpenAI | GPT-5 | `gpt-5` |
-| OpenAI | GPT-5.1 | `gpt-5.1` |
-| OpenAI | GPT-5.2 | `gpt-5.2` |
-| Google | Gemini 3 Flash | `gemini-3-flash-preview` |
-| Google | Gemini 3 Pro | `gemini-3-pro-preview` |
-
-## 프로젝트 구조
+## 📁 프로젝트 구조
 
 ```
 food_agent/
+├── api/
+│   └── main.py                 # FastAPI 백엔드 (SSE 스트리밍)
 ├── src/
-│   ├── __init__.py
-│   ├── main.py          # CLI 진입점
-│   ├── agent.py         # LangGraph 에이전트
-│   ├── config.py        # 설정 관리
-│   ├── models/          # LLM 모델 관리
-│   │   ├── factory.py
-│   │   └── ensemble.py  # (향후 앙상블 지원)
-│   └── tools/           # 커스텀 도구
-│       ├── recipe.py
-│       ├── nutrition.py
-│       ├── meal_plan.py
-│       └── cooking_guide.py
-├── tests/
-├── .env.example
-├── requirements.txt
-└── README.md
+│   ├── agent.py                # LangGraph ReAct 에이전트
+│   ├── config.py               # 설정 관리
+│   ├── db/
+│   │   └── client.py           # Supabase 클라이언트
+│   ├── services/
+│   │   ├── serper.py           # Google Lens + 텍스트 검색
+│   │   └── kakao.py            # 카카오맵 API + Playwright
+│   └── tools/                  # LangChain 도구들
+│       ├── image.py            # search_food_by_image
+│       ├── restaurant.py       # search_restaurant_info, get_restaurant_reviews
+│       ├── recipe.py           # search_recipe_online
+│       ├── nutrition.py        # get_nutrition_info
+│       ├── save_image.py       # save_food_image
+│       └── update_image.py     # update_food_image
+├── frontend/app/               # Next.js 프론트엔드
+│   ├── app/
+│   │   ├── page.tsx           # 메인 채팅 페이지
+│   │   ├── layout.tsx         # 루트 레이아웃
+│   │   └── globals.css        # 글로벌 스타일
+│   ├── components/            # React 컴포넌트
+│   │   ├── chat-input.tsx
+│   │   ├── chat-message.tsx
+│   │   ├── map-embed.tsx
+│   │   ├── image-gallery.tsx
+│   │   ├── restaurant-card.tsx
+│   │   ├── theme-toggle.tsx
+│   │   └── ui/                # shadcn/ui 컴포넌트
+│   ├── hooks/
+│   │   └── use-toast.ts       # Toast 알림 훅
+│   └── lib/
+│       ├── api.ts             # 백엔드 API 클라이언트
+│       ├── types.ts           # TypeScript 타입
+│       └── utils.ts           # 유틸리티 함수
+├── docs/
+│   ├── deployment.md          # 배포 가이드
+│   ├── research_note.md       # 상세 기술 문서
+│   └── supabase_schema.sql    # DB 스키마
+├── scripts/
+│   └── benchmark_latency.py   # 성능 측정
+├── requirements.txt           # Python 의존성 (18개)
+├── setup.sh                   # 자동 설치 스크립트
+├── run_all.sh                 # 서버 실행 스크립트
+├── .env.example               # 환경 변수 템플릿 (10개)
+├── README.md                  # 이 파일
+├── QUICK_START.md             # 5분 빠른 시작
+├── VERIFICATION.md            # 코드 검증 결과
+└── STRUCTURE.md               # 전체 폴더 구조
 ```
 
-## 질문 예시
+> **참고**: 전체 폴더 구조는 [STRUCTURE.md](STRUCTURE.md)를 참고하세요.
 
-```
-👤 "김치찌개 레시피 알려줘"
-👤 "냉장고에 두부랑 김치 있는데 뭐 만들 수 있어?"
-👤 "비빔밥 칼로리가 얼마야?"
-👤 "일주일 다이어트 식단 짜줘"
-👤 "돼지고기 대신 쓸 수 있는 재료 있어?"
-👤 "불고기 만들 때 팁 좀 알려줘"
+## 🚀 빠른 시작
+
+### 1. 설치
+
+```bash
+# 저장소 클론
+git clone <repository-url>
+cd food_agent
+
+# 자동 설치 실행
+chmod +x setup.sh
+./setup.sh
 ```
 
-## 라이선스
+### 2. 환경 변수 설정
+
+`.env` 파일을 열고 API 키를 입력하세요:
+
+```env
+# 필수
+GOOGLE_API_KEY=your-google-api-key
+SERPER_API_KEY=your-serper-api-key
+KAKAO_API_KEY=your-kakao-api-key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key
+
+# 선택 (기본값 사용)
+MODEL_PROVIDER=gemini
+GEMINI_MODEL=gemini-2.0-flash-exp
+```
+
+**API 키 발급:**
+- [Google AI (Gemini)](https://aistudio.google.com/app/apikey)
+- [Serper.dev](https://serper.dev/) - 무료 2,500회/월
+- [카카오 Developers](https://developers.kakao.com/)
+- [Supabase](https://supabase.com/)
+
+### 3. Supabase 설정
+
+Supabase Dashboard → SQL Editor에서 실행:
+```bash
+# docs/supabase_schema.sql 내용 복사 후 실행
+```
+
+### 4. 실행
+
+```bash
+# 백엔드 + 프론트엔드 동시 실행
+./run_all.sh
+
+# 접속
+# - 프론트엔드: http://localhost:3000
+# - 백엔드: http://localhost:8000
+```
+
+## 📖 사용 예시
+
+### 웹 인터페이스
+1. http://localhost:3000 접속
+2. 음식 이미지 업로드 또는 텍스트로 질문
+3. 실시간 스트리밍 응답 확인
+
+### Python API
+
+```python
+from src.agent import KoreanFoodAgent
+
+agent = KoreanFoodAgent()
+
+# 텍스트 질문
+response = agent.chat("강남역 맛집 추천해줘")
+
+# 이미지 질문
+response = agent.chat("/path/to/food.jpg 이 음식 뭐야?")
+
+# 스트리밍
+for chunk in agent.stream("김치찌개 레시피 알려줘"):
+    print(chunk)
+```
+
+### REST API
+
+```bash
+# 동기 채팅
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "불고기 레시피"}'
+
+# 스트리밍 채팅 (SSE)
+curl -N http://localhost:8000/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "불고기 레시피"}'
+```
+
+## 🔧 개발
+
+### 수동 설치
+
+```bash
+# Python 패키지
+pip install -r requirements.txt
+playwright install chromium
+
+# 프론트엔드
+cd frontend/app
+npm install
+```
+
+### 개별 실행
+
+```bash
+# 백엔드만
+python -m uvicorn api.main:app --reload --port 8000
+
+# 프론트엔드만
+cd frontend/app && npm run dev
+```
+
+### 코드 구조
+
+- **에이전트**: `src/agent.py` - LangGraph ReAct 에이전트
+- **도구들**: `src/tools/` - 7개 LangChain 도구
+- **서비스**: `src/services/` - 외부 API 클라이언트
+- **백엔드**: `api/main.py` - FastAPI SSE 스트리밍
+- **프론트엔드**: `frontend/app/` - Next.js 채팅 UI
+
+## 🌐 배포
+
+상세한 배포 가이드는 [docs/deployment.md](docs/deployment.md)를 참고하세요.
+
+### 프로덕션 실행
+
+```bash
+# 백엔드
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+# 프론트엔드
+cd frontend/app
+npm run build
+npm start
+```
+
+## 📊 성능
+
+- **Gemini 2.0 Flash 응답 속도**: 5-10초 (API 지연 포함)
+- **스트리밍 지연**: 실시간 토큰 출력
+- **도구 호출**: 병렬 처리 지원
+- **이미지 검색**: Google Lens 기반
+
+## 🧪 테스트
+
+```bash
+# Gemini 레이턴시 측정
+python scripts/benchmark_latency.py
+```
+
+## 🔐 보안
+
+- Supabase RLS 정책 적용
+- Storage 공개 버킷 사용 (이미지)
+- API 키는 `.env`에서 관리 (Git 제외)
+- CORS 설정 필요 (프로덕션)
+
+## 🤝 기여
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 라이선스
 
 MIT License
+
+## 📚 추가 문서
+
+- [상세 기술 문서](docs/research_note.md)
+- [배포 가이드](docs/deployment.md)
+- [Supabase 스키마](docs/supabase_schema.sql)
+
+## 💡 참고
+
+- **LangGraph**: https://langchain-ai.github.io/langgraph/
+- **Gemini API**: https://ai.google.dev/
+- **Serper.dev**: https://serper.dev/
+- **Supabase**: https://supabase.com/
+
+---
+
+**Made with ❤️ using LangGraph & Gemini**

@@ -24,6 +24,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [toolStatus, setToolStatus] = useState<string>('');
+  const [toolHistory, setToolHistory] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -69,6 +70,7 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
     setToolStatus('');
+    setToolHistory([]);
 
     try {
       let aiContent = '';
@@ -80,9 +82,17 @@ export default function ChatPage() {
           case 'tool':
             if (event.status === 'start' && event.tool) {
               const toolName = TOOL_NAMES_KR[event.tool] || event.tool;
+              setToolHistory(prev => [...prev, toolName]);
               setToolStatus(`${toolName} 중...`);
             } else if (event.status === 'done') {
               setToolStatus('');
+            }
+            break;
+
+          case 'tool_progress':
+            // 🔥 실시간 도구 진행 상황 표시
+            if (event.status) {
+              setToolStatus(event.status);
             }
             break;
 
@@ -156,6 +166,8 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
       setToolStatus('');
+      // 응답 완료 후 1.5초 뒤에 도구 히스토리 클리어
+      setTimeout(() => setToolHistory([]), 1500);
     }
   };
 
@@ -195,17 +207,31 @@ export default function ChatPage() {
             {messages.map((message) => (
               <ChatMessage key={message.id} message={message} />
             ))}
-            {(isLoading || toolStatus) && (
+            {(isLoading || toolStatus || toolHistory.length > 0) && (
               <div className="flex justify-start gap-3 px-4 py-3">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mt-1">
                   <Loader2 className="h-5 w-5 text-primary animate-spin" />
                 </div>
-                <div className="flex items-center gap-2 bg-muted text-foreground rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
-                  <span className="text-sm">{toolStatus || 'AI가 응답을 생성하고 있습니다'}</span>
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
-                    <div className="w-2 h-2 rounded-full bg-current animate-bounce [animation-delay:-0.15s]" />
-                    <div className="w-2 h-2 rounded-full bg-current animate-bounce" />
+                <div className="flex flex-col gap-2">
+                  {toolHistory.length > 0 && (
+                    <div className="bg-muted/50 text-foreground rounded-2xl rounded-bl-md px-4 py-2 shadow-sm">
+                      <div className="text-xs font-medium text-muted-foreground mb-1">실행된 도구:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {toolHistory.map((tool, idx) => (
+                          <span key={idx} className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                            {idx + 1}. {tool}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 bg-muted text-foreground rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                    <span className="text-sm">{toolStatus || 'AI가 응답을 생성하고 있습니다'}</span>
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
+                      <div className="w-2 h-2 rounded-full bg-current animate-bounce [animation-delay:-0.15s]" />
+                      <div className="w-2 h-2 rounded-full bg-current animate-bounce" />
+                    </div>
                   </div>
                 </div>
               </div>
