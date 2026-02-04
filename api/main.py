@@ -179,15 +179,38 @@ async def chat_stream(request: ChatRequest):
         image_paths = " ".join(temp_files)
         message = f"{image_paths} {message}"
 
-    async def generate():
+    def generate():
         try:
             current_tool = None
             final_text = ""
 
-            # 초기 세션 ID 전송
+            # 세션 ID 전송
             yield f"data: {json.dumps({'type': 'session', 'session_id': session_id})}\n\n"
 
-            for chunk, metadata in agent.stream(message):
+            for item in agent.stream(message):
+                # 여러 stream_mode 사용 시 (mode, chunk) 튜플 형식
+                if isinstance(item, tuple) and len(item) == 2:
+                    mode, chunk = item
+
+                    # Custom 이벤트 처리 (도구 진행 상황)
+                    if mode == "custom":
+                        if isinstance(chunk, dict):
+                            tool_name = chunk.get("tool", "")
+                            status_msg = chunk.get("status", "")
+                            if tool_name and status_msg:
+                                yield f"data: {json.dumps({'type': 'tool_progress', 'tool': tool_name, 'status': status_msg})}\n\n"
+                        continue
+
+                    # Messages 모드일 때만 아래 로직 실행
+                    if mode != "messages":
+                        continue
+
+                    # Messages 모드의 chunk는 (message, metadata) 튜플일 수 있음
+                    if isinstance(chunk, tuple) and len(chunk) == 2:
+                        chunk, _ = chunk  # message만 추출
+                else:
+                    chunk = item
+
                 # 도구 호출 감지
                 if hasattr(chunk, 'tool_call_chunks') and chunk.tool_call_chunks:
                     for tc in chunk.tool_call_chunks:
@@ -197,7 +220,7 @@ async def chat_stream(request: ChatRequest):
                             yield f"data: {json.dumps({'type': 'tool', 'tool': tool_name, 'status': 'start'})}\n\n"
 
                 # 도구 완료
-                elif chunk.type == "tool":
+                elif hasattr(chunk, 'type') and chunk.type == "tool":
                     if current_tool:
                         yield f"data: {json.dumps({'type': 'tool', 'tool': current_tool, 'status': 'done'})}\n\n"
                     current_tool = None
@@ -209,9 +232,9 @@ async def chat_stream(request: ChatRequest):
                             final_text += chunk.content
                             yield f"data: {json.dumps({'type': 'text', 'content': chunk.content})}\n\n"
                         elif isinstance(chunk.content, list):
-                            for item in chunk.content:
-                                if isinstance(item, dict) and item.get('type') == 'text':
-                                    txt = item.get('text', '')
+                            for item_content in chunk.content:
+                                if isinstance(item_content, dict) and item_content.get('type') == 'text':
+                                    txt = item_content.get('text', '')
                                     final_text += txt
                                     yield f"data: {json.dumps({'type': 'text', 'content': txt})}\n\n"
 
@@ -230,7 +253,6 @@ async def chat_stream(request: ChatRequest):
             "Connection": "keep-alive",
         }
     )
-
 
 @app.post("/session/clear")
 async def clear_session(session_id: str):

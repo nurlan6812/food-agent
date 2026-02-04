@@ -44,7 +44,7 @@ export async function sendChatMessage(message: string): Promise<ChatResponse> {
 }
 
 export interface StreamEvent {
-  type: 'session' | 'tool' | 'text' | 'done' | 'error';
+  type: 'session' | 'tool' | 'tool_progress' | 'text' | 'done' | 'error';
   session_id?: string;
   tool?: string;
   status?: string;
