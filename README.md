@@ -96,60 +96,67 @@ food_agent/
 
 > **참고**: 전체 폴더 구조는 [STRUCTURE.md](STRUCTURE.md)를 참고하세요.
 
-## 🚀 빠른 시작
+## 🚀 빠른 시작 (5분)
+
+### 사전 준비
+
+**필수 API 키 발급:**
+- [Google AI (Gemini)](https://aistudio.google.com/app/apikey) - 무료
+- [Serper.dev](https://serper.dev/) - 무료 2,500회/월
+- [카카오 Developers](https://developers.kakao.com/) - 무료
+- [Supabase](https://supabase.com/) - 무료 500MB
 
 ### 1. 설치
 
 ```bash
 # 저장소 클론
-git clone <repository-url>
+git clone https://github.com/nurlan6812/food-agent.git
 cd food_agent
 
 # 자동 설치 실행
-chmod +x setup.sh
 ./setup.sh
 ```
 
 ### 2. 환경 변수 설정
 
-`.env` 파일을 열고 API 키를 입력하세요:
-
-```env
-# 필수
-GOOGLE_API_KEY=your-google-api-key
-SERPER_API_KEY=your-serper-api-key
-KAKAO_API_KEY=your-kakao-api-key
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-supabase-anon-key
-
-# 선택 (기본값 사용)
-MODEL_PROVIDER=gemini
-GEMINI_MODEL=gemini-2.0-flash-exp
+```bash
+nano .env
 ```
 
-**API 키 발급:**
-- [Google AI (Gemini)](https://aistudio.google.com/app/apikey)
-- [Serper.dev](https://serper.dev/) - 무료 2,500회/월
-- [카카오 Developers](https://developers.kakao.com/)
-- [Supabase](https://supabase.com/)
+**필수 5개만 입력:**
+```env
+GOOGLE_API_KEY=실제-구글-API-키
+SERPER_API_KEY=실제-Serper-API-키
+KAKAO_API_KEY=실제-카카오-API-키
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=실제-Supabase-Anon-Key
+```
 
 ### 3. Supabase 설정
 
-Supabase Dashboard → SQL Editor에서 실행:
-```bash
-# docs/supabase_schema.sql 내용 복사 후 실행
-```
+**① 테이블 생성**
+1. Supabase Dashboard → SQL Editor
+2. `docs/supabase_schema.sql` 내용 복사
+3. 실행 (Run)
+
+**② Storage 버킷 생성**
+1. Supabase Dashboard → Storage
+2. Create bucket → 이름: `images`, Public 체크
+3. Policies → Allow public access
 
 ### 4. 실행
 
 ```bash
-# 백엔드 + 프론트엔드 동시 실행
 ./run_all.sh
-
-# 접속
-# - 프론트엔드: http://localhost:3000
-# - 백엔드: http://localhost:8000
 ```
+
+**접속:**
+- 🎨 프론트엔드: http://localhost:3000
+- 🔧 백엔드 API: http://localhost:8000
+
+끝! 🎉
+
+---
 
 ## 📖 사용 예시
 
