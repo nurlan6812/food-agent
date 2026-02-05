@@ -63,6 +63,30 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* 모바일 최적화 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* 오버스크롤 방지 */
+    overscroll-behavior: none;
+    /* iOS 터치 하이라이트 제거 */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Safe Area 지원 (아이폰 노치 등) */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* 모바일 100vh 문제 해결 */
+  html {
+    height: -webkit-fill-available;
+  }
+  body {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
   }
 }
 

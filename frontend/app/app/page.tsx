@@ -172,10 +172,10 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-b from-background to-muted/20">
+    <div className="flex flex-col h-[100dvh] bg-gradient-to-b from-background to-muted/20">
       {/* 헤더 */}
-      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 safe-top">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
               <Sparkles className="h-6 w-6 text-primary-foreground" />
@@ -201,8 +201,8 @@ export default function ChatPage() {
       </header>
 
       {/* 메시지 영역 */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto">
+      <main className="flex-1 overflow-y-auto overscroll-contain">
+        <div className="max-w-4xl mx-auto px-2 sm:px-0">
           <div className="py-4">
             {messages.map((message) => (
               <ChatMessage key={message.id} message={message} />
