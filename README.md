@@ -20,7 +20,7 @@ LangGraph + Gemini 기반 한국 음식 AI 에이전트
 ### Backend
 | 레이어 | 기술 | 설명 |
 |--------|------|------|
-| **LLM** | Gemini 2.0 Flash | 멀티모달 언어 모델 |
+| **LLM** | Gemini 3.0 Flash | 멀티모달 언어 모델 |
 | **에이전트** | LangGraph | ReAct 패턴 구현 |
 | **메모리** | MemorySaver | 대화 히스토리 자동 관리 |
 | **API** | FastAPI | 스트리밍 지원 백엔드 |
@@ -290,7 +290,3 @@ MIT License
 - **Gemini API**: https://ai.google.dev/
 - **Serper.dev**: https://serper.dev/
 - **Supabase**: https://supabase.com/
-
----
-
-**Made with ❤️ using LangGraph & Gemini**
