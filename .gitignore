@@ -101,6 +101,16 @@ test-results/
 playwright-report/
 
 # ===========================
+# PWA (Progressive Web App)
+# ===========================
+**/public/sw.js
+**/public/workbox-*.js
+**/public/worker-*.js
+**/public/sw.js.map
+**/public/workbox-*.js.map
+**/public/worker-*.js.map
+
+# ===========================
 # 별도 프로젝트
 # ===========================
 custom-gpt/
