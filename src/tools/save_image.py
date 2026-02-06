@@ -62,9 +62,9 @@ def upload_to_supabase_storage(local_path: str, supabase) -> str:
 def save_food_image(
     image_url: str,
     food_name: str,
-    source_type: Optional[str] = None,
-    restaurant_name: Optional[str] = None,
-    location: Optional[str] = None
+    source_type: str = "",
+    restaurant_name: str = "",
+    location: str = ""
 ) -> str:
     """
     웹에 없는 새 이미지를 데이터베이스에 저장합니다.
@@ -109,7 +109,7 @@ def save_food_image(
         data = {
             "image_url": final_url,
             "food_name": food_name,
-            "food_source_type": source_type or "unknown",
+            "food_source_type": source_type if source_type else "unknown",
             "food_verified": False,
             "restaurant_verified": False,
         }

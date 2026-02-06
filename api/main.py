@@ -46,7 +46,8 @@ agents: dict[str, KoreanFoodAgent] = {}
 def get_or_create_agent(session_id: str) -> KoreanFoodAgent:
     """세션 ID로 에이전트 가져오거나 생성"""
     if session_id not in agents:
-        agents[session_id] = KoreanFoodAgent(provider="gemini")
+        provider = os.getenv("MODEL_PROVIDER", "vllm")
+        agents[session_id] = KoreanFoodAgent(provider=provider)
     return agents[session_id]
 
 

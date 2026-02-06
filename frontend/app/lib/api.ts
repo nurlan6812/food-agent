@@ -3,12 +3,7 @@ import type { ChatResponse } from './types';
 // 브라우저에서 실행 시 window.location 기반으로 API URL 결정
 function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
-    // 개발 환경이면 localhost:8000 사용
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://localhost:8000';
-    }
-    // 프로덕션이면 같은 호스트의 /api 사용 또는 환경변수
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    return `http://${window.location.hostname}:8000`;
   }
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 }

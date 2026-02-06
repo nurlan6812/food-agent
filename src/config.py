@@ -12,6 +12,8 @@ class ModelProvider(str, Enum):
     """LLM 제공자"""
     OPENAI = "openai"
     GEMINI = "gemini"
+    LOCAL = "local"  # 로컬 모델 (GLM-4.6V-Flash)
+    VLLM = "vllm"    # vLLM 서버 (OpenAI 호환 API)
 
 
 class Settings(BaseModel):
@@ -27,6 +29,23 @@ class Settings(BaseModel):
     )
     openai_model: str = Field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o"))
     gemini_model: str = Field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.0-flash"))
+    local_model_path: str = Field(
+        default_factory=lambda: os.getenv(
+            "LOCAL_MODEL_PATH",
+            "/home/ondamlab/.cache/huggingface/hub/models--zai-org--GLM-4.6V-Flash/snapshots/main"
+        )
+    )
+
+    # vLLM 설정
+    vllm_base_url: str = Field(
+        default_factory=lambda: os.getenv("VLLM_BASE_URL", "http://localhost:8001/v1")
+    )
+    vllm_model: str = Field(
+        default_factory=lambda: os.getenv(
+            "VLLM_MODEL",
+            "/home/ondamlab/.cache/huggingface/hub/models--QuantTrio--Qwen3-VL-30B-A3B-Instruct-AWQ/snapshots/main"
+        )
+    )
 
 
 # 전역 설정 인스턴스

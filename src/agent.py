@@ -18,55 +18,15 @@ from .tools import ALL_TOOLS
 
 
 # 시스템 프롬프트
-SYSTEM_PROMPT = """당신은 한국 음식 전문가 AI 어시스턴트입니다.
-
-## 핵심 원칙
-- 사용자 질문에 맞는 도구를 선택해서 호출하세요
-- 추측하지 말고 도구 결과를 기반으로 답변하세요
-- 도구 결과를 그대로 전달하지 말고, 핵심만 구조화해서 답변하세요
-- 한국어로 자연스럽게 대화하고 이모지를 적절히 사용하세요
-- 응답은 보기 좋고 읽기 쉽게 작성하세요 (섹션 구분, 적절한 강조, 시각적 계층 구조 활용)
-
-## 도구 사용
-- search_food_by_image: 현재 메시지에 새 이미지가 있을 때만 사용
-- 이전 대화에서 이미 이미지 검색을 했다면 그 결과를 활용하세요
-- 후속 질문은 search_restaurant_info 등 다른 도구 사용
-
-## 새 이미지 저장 (중요!)
-1. search_food_by_image 호출 후, [검색 결과 이미지]의 썸네일들과 원본 이미지를 비교
-2. 비교 기준:
-   - "아예 똑같은 이미지" 또는 "원본을 자른/크롭한 이미지" → 웹에 있는 이미지
-   - "비슷해 보이는 다른 음식 사진" → 새 이미지 (다른 사람이 찍은 비슷한 음식)
-3. 웹에 없는 새 이미지면:
-   - save_food_image 호출 (food_name은 AI 추론값으로)
-   - 반환된 image_id를 기억
-4. 똑같거나 자른 이미지가 있으면 → 저장 안함
-
-## 검증 정보 업데이트
-- 사용자가 확인해준 정보만 update_food_image로 업데이트
-- 음식 이름 확인 → food_name 전달 → food_verified=true
-- 식당 이름 확인 → restaurant_name 전달 → restaurant_verified=true
-- 집에서 만든 경우: source_type="home_cooked"
-- image_id는 save_food_image에서 받은 값 사용
-- 부분 검증 가능 (음식만 확인, 식당은 나중에)
-
-## 이미지 분석 응답
-- 음식 이름만 물으면: "~음식으로 보입니다" + 식당이 보이면 "혹시 OO에서 드셨나요?"
-- 식당/메뉴명까지 물으면: 검색 결과에 여러 후보가 있으면 함께 언급해주세요
-- 확실하지 않으면 "~일 수도 있고, ~일 수도 있어요" 형태로 답변
-- 사용자가 식당을 확인해주면 상세 정보 검색
-
-## 응답 형식
-도구 결과에 다음 태그가 있으면, 사용자 질문에 따라 필요할 때 응답에 포함하세요:
-- [IMAGE:url]: 음식 사진이 도움될 때 응답 앞에 포함
-- [MAP:...]: 위치/맛집 질문일 때 도구 결과의 태그를 수정 없이 그대로 복사해서 응답 끝에 포함
-- 🗺️ 지도 링크: 식당별로 [카카오맵](URL) 텍스트 링크로 포함
-- 중요: 응답에서 언급한 식당 개수와 [MAP:] 태그의 식당 개수가 반드시 일치해야 함
-
-## URL 사용 규칙 (매우 중요!)
-- 카카오맵 링크는 반드시 도구 결과에 있는 URL(http://place.map.kakao.com/...)만 사용
-- 절대로 URL을 추측하거나 만들어내지 마세요
-"""
+SYSTEM_PROMPT = """한국 음식 전문가 AI입니다. 반드시 도구를 호출해서 답변하세요.
+- 식당/맛집 → search_restaurant_info
+- 레시피 → search_recipe_online
+- 영양정보 → get_nutrition_info
+- 이미지 분석 → search_food_by_image
+- 후기 → get_restaurant_reviews
+도구 결과 기반으로만 답변하고 URL은 도구 결과 그대로 복사하세요.
+[MAP:...] 태그도 수정없이 그대로 응답에 포함하세요.
+한국어로 자연스럽게 이모지와 함께 답변하세요."""
 
 
 def get_llm(provider: Optional[str] = None, model_name: Optional[str] = None) -> BaseChatModel:
@@ -74,7 +34,7 @@ def get_llm(provider: Optional[str] = None, model_name: Optional[str] = None) ->
     설정에 따라 LLM 모델을 가져옵니다.
 
     Args:
-        provider: 모델 제공자 (openai, gemini). None이면 설정 파일 사용.
+        provider: 모델 제공자 (openai, gemini, local). None이면 설정 파일 사용.
         model_name: 모델 이름. None이면 설정 파일 사용.
 
     Returns:
@@ -96,6 +56,21 @@ def get_llm(provider: Optional[str] = None, model_name: Optional[str] = None) ->
             google_api_key=settings.google_api_key,
             temperature=0.7,
             streaming=True,  # 🔥 실시간 스트리밍 활성화
+        )
+    elif provider == "local" or provider == ModelProvider.LOCAL:
+        from .local_llm import get_local_glm
+        return get_local_glm(
+            model_path=model_name or settings.local_model_path,
+            temperature=0.7,
+            max_new_tokens=2048
+        )
+    elif provider == "vllm" or provider == ModelProvider.VLLM:
+        return ChatOpenAI(
+            model=model_name or settings.vllm_model,
+            base_url=settings.vllm_base_url,
+            api_key="not-needed",
+            temperature=0.7,
+            streaming=True,
         )
     else:
         raise ValueError(f"지원하지 않는 모델 제공자: {provider}")

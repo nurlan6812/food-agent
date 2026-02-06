@@ -16,10 +16,10 @@ except ImportError:
 @tool
 def update_food_image(
     image_id: str,
-    food_name: Optional[str] = None,
-    source_type: Optional[str] = None,
-    restaurant_name: Optional[str] = None,
-    location: Optional[str] = None
+    food_name: str = "",
+    source_type: str = "",
+    restaurant_name: str = "",
+    location: str = ""
 ) -> str:
     """
     사용자가 확인해준 음식 정보로 DB를 업데이트합니다.
