@@ -54,7 +54,8 @@ def _crawl_nutrition_page(url: str) -> str:
 @tool
 def get_nutrition_info(query: str) -> str:
     """
-    음식의 영양정보를 검색합니다.
+    칼로리, 영양성분, 열량, 탄수화물, 단백질 등을 물으면 반드시 이 도구를 사용하세요.
+    직접 영양정보를 답변하지 말고 이 도구로 검색하세요.
 
     Args:
         query: 검색 쿼리 (예: "김치찌개 칼로리", "스타벅스 아메리카노 열량")

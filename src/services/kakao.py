@@ -32,13 +32,13 @@ class KakaoLocalAPI:
         self.api_key = api_key or os.getenv("KAKAO_API_KEY")
         self.base_url = "https://dapi.kakao.com/v2/local/search/keyword.json"
 
-    def search_restaurant(self, query: str) -> Optional[Dict[str, Any]]:
+    def search_restaurant(self, query: str, page: int = 1) -> Optional[Dict[str, Any]]:
         """식당명으로 카카오 로컬 검색"""
         if not self.api_key:
             return None
 
         headers = {"Authorization": f"KakaoAK {self.api_key}"}
-        params = {"query": query, "category_group_code": "FD6", "size": 5}
+        params = {"query": query, "category_group_code": "FD6", "size": 5, "page": page}
 
         try:
             response = requests.get(self.base_url, headers=headers, params=params, timeout=10)

@@ -13,21 +13,24 @@ from ..services import get_kakao
 
 
 @tool
-def search_restaurant_info(query: str) -> str:
+def search_restaurant_info(query: str, page: int = 1) -> str:
     """
-    식당을 검색합니다. 식당명, 지역+음식, 지역+맛집 등 다양한 검색어를 지원합니다.
+    맛집, 식당, 메뉴, 가격을 찾을 때 이 도구를 사용하세요.
+    식당명으로 검색하면 메뉴명, 가격, 주소, 전화번호를 알 수 있습니다.
+    "다른 맛집", "더 추천" 요청 시 page=2,3으로 다음 페이지를 검색하세요.
 
     Args:
         query: 검색어 (식당명, 지역+음식, 지역+맛집 등)
+        page: 페이지 번호 (기본 1, 다른 결과 원하면 2,3 사용)
 
     Returns:
-        식당 정보 (이름, 주소, 전화번호, 카테고리, 메뉴)
+        식당 정보 (이름, 주소, 전화번호, 카테고리, 메뉴, 가격)
     """
     writer = get_stream_writer()
     writer({"tool": "search_restaurant_info", "status": "카카오맵 검색 중..."})
 
     kakao = get_kakao()
-    result = kakao.search_restaurant(query)
+    result = kakao.search_restaurant(query, page=page)
 
     output = []
     place_id = None
@@ -88,8 +91,8 @@ def search_restaurant_info(query: str) -> str:
 @tool
 def get_restaurant_reviews(restaurant_name: str) -> str:
     """
-    식당의 후기를 카카오맵에서 가져와 요약합니다.
-    사용자가 "후기 어때", "리뷰 알려줘" 등을 물어볼 때 사용합니다.
+    후기, 리뷰, 평점, 평가, 비교를 물으면 반드시 이 도구를 사용하세요.
+    식당 비교 시 각 식당마다 이 도구를 호출하세요.
 
     Args:
         restaurant_name: 식당 이름

@@ -158,10 +158,32 @@ class SerperImageSearcher:
         return None
 
     def search_with_lens(self, image_url: str) -> Dict[str, Any]:
-        """Google Lens로 이미지 검색"""
+        """Google Lens로 이미지 검색 (Serper.dev 우선)"""
         if not REQUESTS_AVAILABLE:
             return {"error": "requests 라이브러리가 설치되지 않았습니다."}
 
+        # Serper.dev 우선
+        if self.serper_key:
+            try:
+                headers = {
+                    "X-API-KEY": self.serper_key,
+                    "Content-Type": "application/json"
+                }
+                data = {"url": image_url, "gl": "kr", "hl": "ko"}
+                response = requests.post(self.lens_url, headers=headers, json=data, timeout=30)
+                response.raise_for_status()
+                result = response.json()
+                organic = result.get("organic", [])
+                if organic:
+                    return {
+                        "visual_matches": organic,
+                        "text": [],
+                        "knowledge_graph": {}
+                    }
+            except Exception:
+                pass
+
+        # SerpAPI 폴백
         if self.serpapi_key:
             try:
                 params = {
@@ -174,37 +196,15 @@ class SerperImageSearcher:
                 response = requests.get(self.serpapi_url, params=params, timeout=30)
                 response.raise_for_status()
                 result = response.json()
-
-                visual_matches = result.get("visual_matches", [])
-                if visual_matches:
-                    return {
-                        "visual_matches": visual_matches,
-                        "text": result.get("text_results", []),
-                        "knowledge_graph": result.get("knowledge_graph", {})
-                    }
+                return {
+                    "visual_matches": result.get("visual_matches", []),
+                    "text": result.get("text_results", []),
+                    "knowledge_graph": result.get("knowledge_graph", {})
+                }
             except Exception:
                 pass
 
-        if not self.serper_key:
-            return {"error": "API 키가 설정되지 않았습니다."}
-
-        headers = {
-            "X-API-KEY": self.serper_key,
-            "Content-Type": "application/json"
-        }
-        data = {"url": image_url, "gl": "kr", "hl": "ko"}
-
-        try:
-            response = requests.post(self.lens_url, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
-            result = response.json()
-            return {
-                "visual_matches": result.get("organic", []),
-                "text": [],
-                "knowledge_graph": {}
-            }
-        except requests.RequestException as e:
-            return {"error": f"API 요청 실패: {str(e)}"}
+        return {"error": "API 키가 설정되지 않았습니다."}
 
     def search_with_combined(self, image_url: str) -> Dict[str, Any]:
         """여러 검색 방법을 조합하여 최상의 결과 반환"""

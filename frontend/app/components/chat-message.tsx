@@ -7,6 +7,7 @@ import { RestaurantCard } from './restaurant-card';
 import { MapEmbed } from './map-embed';
 import { Bot, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatMessageProps {
   message: Message;
@@ -51,11 +52,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
             ) : (
               <div className="text-sm chat-markdown">
                 <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
                   components={{
                     a: ({ href, children }) => (
                       <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">
                         {children}
                       </a>
+                    ),
+                    table: ({ children }) => (
+                      <div className="table-wrapper">
+                        <table>{children}</table>
+                      </div>
                     ),
                   }}
                 >

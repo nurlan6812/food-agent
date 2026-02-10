@@ -43,7 +43,7 @@ class Settings(BaseModel):
     vllm_model: str = Field(
         default_factory=lambda: os.getenv(
             "VLLM_MODEL",
-            "/home/ondamlab/.cache/huggingface/hub/models--QuantTrio--Qwen3-VL-30B-A3B-Instruct-AWQ/snapshots/main"
+            "/home/ondamlab/.cache/huggingface/hub/models--cyankiwi--Qwen3-30B-A3B-Instruct-2507-AWQ-4bit/snapshots/main"
         )
     )
 

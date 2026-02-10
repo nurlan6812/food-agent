@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
+from langchain_core.messages.utils import trim_messages, count_tokens_approximately
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
@@ -24,9 +25,18 @@ SYSTEM_PROMPT = """한국 음식 전문가 AI입니다. 반드시 도구를 호�
 - 영양정보 → get_nutrition_info
 - 이미지 분석 → search_food_by_image
 - 후기 → get_restaurant_reviews
-도구 결과 기반으로만 답변하고 URL은 도구 결과 그대로 복사하세요.
-[MAP:...] 태그도 수정없이 그대로 응답에 포함하세요.
-한국어로 자연스럽게 이모지와 함께 답변하세요."""
+도구 결과 기반으로 사용자 질문에 자세하고 친절하게 답변하세요.
+사용자가 명시적으로 요청한 정보에 해당하는 도구만 호출하세요. 도구 결과에서 파생된 추가 검색은 하지 마세요.
+반드시 한국어로만 답변하세요. 중국어/영어 사용 금지.
+마크다운과 이모지를 활용해 보기 좋고 읽기 쉽게 작성하세요 (섹션 구분, 적절한 강조, 시각적 계층 구조 활용).
+레시피 조리 순서는 반드시 번호(1. 2. 3.)를 매겨 단계별로 작성하세요.
+
+## 이미지 분석 응답
+- 이미지 + 질문이 올 경우 search_food_by_image를 우선 호출 후, 질문에 필요한 도구를 순차적으로 호출
+- 음식 이름만 물으면: "~음식으로 보입니다" + 식당이 보이면 "혹시 OO에서 드셨나요?"
+- 식당/메뉴명까지 물으면: 검색 결과에 여러 후보가 있으면 함께 언급해주세요
+- 확실하지 않으면 "~일 수도 있고, ~일 수도 있어요" 형태로 답변
+- 도구 결과를 단정짓지 말고 "~로 보입니다", "~로 추정됩니다" 형태로 답변하세요"""
 
 
 def get_llm(provider: Optional[str] = None, model_name: Optional[str] = None) -> BaseChatModel:
@@ -69,11 +79,39 @@ def get_llm(provider: Optional[str] = None, model_name: Optional[str] = None) ->
             model=model_name or settings.vllm_model,
             base_url=settings.vllm_base_url,
             api_key="not-needed",
-            temperature=0.7,
+            temperature=0.3,
             streaming=True,
         )
     else:
         raise ValueError(f"지원하지 않는 모델 제공자: {provider}")
+
+
+def _pre_model_trim(state):
+    """vLLM용: 오래된 메시지를 토큰 기반으로 제거합니다.
+    최신 메시지 우선 보존, tool call/result 쌍 자동 유지."""
+    trimmed = trim_messages(
+        state["messages"],
+        strategy="last",
+        token_counter=count_tokens_approximately,
+        max_tokens=4096,
+        start_on="human",
+        end_on=("human", "tool"),
+    )
+    # 디버그: LLM에 전달되는 메시지 로깅
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+    for msg in trimmed:
+        role = getattr(msg, 'type', 'unknown')
+        if role == 'ai' and hasattr(msg, 'tool_calls') and msg.tool_calls:
+            for tc in msg.tool_calls:
+                logger.warning(f"[PRE_MODEL] ai tool_call: {tc['name']}({tc.get('args',{})})")
+        elif role == 'tool':
+            content_preview = str(msg.content)[:100] if msg.content else ''
+            logger.warning(f"[PRE_MODEL] tool result ({msg.name}): {content_preview}...")
+        elif role == 'human':
+            content_preview = str(msg.content)[:100] if msg.content else ''
+            logger.warning(f"[PRE_MODEL] human: {content_preview}")
+    return {"llm_input_messages": trimmed}
 
 
 def create_food_agent(
@@ -94,11 +132,15 @@ def create_food_agent(
     """
     llm = get_llm(provider, model_name)
 
+    p = provider or settings.model_provider.value
+    use_trim = p in ("vllm", ModelProvider.VLLM)
+
     agent = create_react_agent(
         model=llm,
         tools=ALL_TOOLS,
         prompt=SYSTEM_PROMPT,
         checkpointer=checkpointer,
+        pre_model_hook=_pre_model_trim if use_trim else None,
     )
 
     return agent
@@ -225,7 +267,13 @@ class KoreanFoodAgent:
         return {"configurable": {"thread_id": self.thread_id}}
 
     def _prepare_message(self, message: str) -> HumanMessage:
-        """메시지를 HumanMessage로 변환 (이미지 포함 가능)."""
+        """메시지를 HumanMessage로 변환.
+        vLLM(텍스트 전용)에서는 이미지를 포함하지 않음 - Gemini가 도구 내에서 처리."""
+        # vLLM은 텍스트 전용 모델이므로 이미지 경로만 텍스트로 전달
+        # 에이전트가 search_food_by_image 도구에 경로를 전달하면 Gemini가 분석
+        if self.provider in ("vllm", ModelProvider.VLLM):
+            return HumanMessage(content=message)
+
         image_paths = extract_image_paths(message)
 
         if image_paths:

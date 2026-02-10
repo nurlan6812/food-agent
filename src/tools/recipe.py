@@ -37,6 +37,13 @@ def _crawl_recipe_fast(url: str) -> str:
         if '10000recipe.com' in url:
             output = []
 
+            # 완성 사진 추출
+            main_img = soup.select_one('#main_thumbs img, .view2_pic_best img, .centeredcrop img')
+            if main_img:
+                img_url = main_img.get('src', '') or main_img.get('data-src', '')
+                if img_url and img_url.startswith('http') and 'btn_' not in img_url and 'icon' not in img_url:
+                    output.append(f"[IMAGE:{img_url}]")
+
             title_el = soup.select_one('.view2_summary h3, .view2_summary_tit')
             if title_el:
                 output.append(f"[{title_el.get_text(strip=True)}]")
@@ -103,13 +110,13 @@ def _crawl_recipe_fast(url: str) -> str:
 @tool
 def search_recipe_online(query: str) -> str:
     """
-    인터넷에서 레시피를 검색합니다.
-
+    레시피, 만드는 법, 요리법, 조리법을 물으면 반드시 이 도구를 사용하세요.
+    직접 레시피를 답변하지 말고 이 도구로 검색하세요.
     Args:
         query: 검색 쿼리 (예: "김치찌개 레시피", "백종원 된장찌개")
 
     Returns:
-        레시피 정보 (재료, 조리 순서) - 최대 3개 레시피
+        레시피 정보 (재료, 조리 순서)
     """
     writer = get_stream_writer()
     writer({"tool": "search_recipe_online", "status": "레시피 검색 중..."})
@@ -127,7 +134,7 @@ def search_recipe_online(query: str) -> str:
 
     writer({"tool": "search_recipe_online", "status": "레시피 페이지 분석 중..."})
     output = [f"[검색: {query}]"]
-    for i, item in enumerate(organic[:3], 1):
+    for i, item in enumerate(organic[:1], 1):
         link = item.get("link", "")
         recipe_data = _crawl_recipe_fast(link)
         output.append(f"\n=== 레시피 {i} ===\n{recipe_data}")

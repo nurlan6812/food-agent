@@ -108,14 +108,17 @@ export async function* streamChatMessage(
   }
 
   const decoder = new TextDecoder();
+  let buffer = '';
 
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      // 마지막 요소는 불완전한 라인일 수 있으므로 버퍼에 보관
+      buffer = lines.pop() || '';
 
       for (const line of lines) {
         if (line.startsWith('data: ')) {

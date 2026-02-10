@@ -184,6 +184,9 @@ async def chat_stream(request: ChatRequest):
         try:
             current_tool = None
             final_text = ""
+            tool_map_url = None
+            tool_images = []
+            text_started = False
 
             # 세션 ID 전송
             yield f"data: {json.dumps({'type': 'session', 'session_id': session_id})}\n\n"
@@ -216,31 +219,58 @@ async def chat_stream(request: ChatRequest):
                 if hasattr(chunk, 'tool_call_chunks') and chunk.tool_call_chunks:
                     for tc in chunk.tool_call_chunks:
                         tool_name = tc.get("name", "")
+                        tool_args = tc.get("args", "")
                         if tool_name and tool_name != current_tool:
                             current_tool = tool_name
+                            import logging
+                            logging.getLogger("uvicorn.error").warning(f"[TOOL_CALL] {tool_name} args={tool_args}")
                             yield f"data: {json.dumps({'type': 'tool', 'tool': tool_name, 'status': 'start'})}\n\n"
 
-                # 도구 완료
+                # 도구 완료 - 도구 결과에서 MAP 태그 직접 추출
                 elif hasattr(chunk, 'type') and chunk.type == "tool":
                     if current_tool:
                         yield f"data: {json.dumps({'type': 'tool', 'tool': current_tool, 'status': 'done'})}\n\n"
+                        # 도구 결과에서 MAP/IMAGE 태그 추출
+                        tool_content = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
+                        map_match = re.search(r'\[MAP:([^\]]+)\]', tool_content)
+                        if map_match and not tool_map_url:
+                            tool_map_url = map_match.group(1)
+                        img_matches = re.findall(r'\[IMAGE:(https?://[^\]]+)\]', tool_content)
+                        if img_matches:
+                            tool_images.extend(img_matches)
                     current_tool = None
 
                 # AI 응답 텍스트
                 elif hasattr(chunk, 'content') and chunk.content:
                     if not (hasattr(chunk, 'tool_calls') and chunk.tool_calls):
                         if isinstance(chunk.content, str):
-                            final_text += chunk.content
-                            yield f"data: {json.dumps({'type': 'text', 'content': chunk.content})}\n\n"
+                            txt = chunk.content
+                            if not text_started:
+                                txt = txt.lstrip('\n')
+                                if txt:
+                                    text_started = True
+                            if txt:
+                                final_text += txt
+                                yield f"data: {json.dumps({'type': 'text', 'content': txt})}\n\n"
                         elif isinstance(chunk.content, list):
                             for item_content in chunk.content:
                                 if isinstance(item_content, dict) and item_content.get('type') == 'text':
                                     txt = item_content.get('text', '')
-                                    final_text += txt
-                                    yield f"data: {json.dumps({'type': 'text', 'content': txt})}\n\n"
+                                    if not text_started:
+                                        txt = txt.lstrip('\n')
+                                        if txt:
+                                            text_started = True
+                                    if txt:
+                                        final_text += txt
+                                        yield f"data: {json.dumps({'type': 'text', 'content': txt})}\n\n"
 
             # 최종 미디어 태그 추출 결과
             text, map_url, images = extract_media_tags(final_text)
+            # Qwen3가 태그를 안 넣었으면 도구 결과에서 추출한 것 사용
+            if not map_url and tool_map_url:
+                map_url = tool_map_url
+            if not images and tool_images:
+                images = tool_images
             yield f"data: {json.dumps({'type': 'done', 'map_url': map_url, 'images': images})}\n\n"
 
         except Exception as e:
