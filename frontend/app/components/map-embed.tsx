@@ -110,14 +110,12 @@ export function MapEmbed({ url }: MapEmbedProps) {
       return;
     }
 
-    // 카카오맵 SDK 로드 확인
-    if (!window.kakao || !window.kakao.maps) {
-      setError('카카오맵 SDK가 로드되지 않았습니다');
-      return;
-    }
-
-    // 카카오맵 로드
-    window.kakao.maps.load(() => {
+    // 카카오맵 SDK 로드 대기 (최대 5초)
+    let attempts = 0;
+    const timer = setInterval(() => {
+      if (window.kakao && window.kakao.maps) {
+        clearInterval(timer);
+        window.kakao.maps.load(() => {
       if (!mapRef.current) return;
 
       try {
@@ -210,7 +208,14 @@ export function MapEmbed({ url }: MapEmbedProps) {
         setError('지도를 로드하는 중 오류가 발생했습니다');
         console.error('Kakao Map Error:', e);
       }
-    });
+        });
+      } else if (++attempts >= 25) {
+        clearInterval(timer);
+        setError('카카오맵 SDK가 로드되지 않았습니다');
+      }
+    }, 200);
+
+    return () => clearInterval(timer);
   }, [url]);
 
   // 선택 해제 함수

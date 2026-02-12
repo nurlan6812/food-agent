@@ -1,11 +1,11 @@
 {
-  "name": "Korean Food Agent",
-  "short_name": "Food AI",
-  "description": "한국 음식 AI 에이전트 - 음식 인식, 식당 검색, 레시피, 영양정보",
+  "name": "K-Foodie AI",
+  "short_name": "K-Foodie",
+  "description": "K-Food AI 어시스턴트 - 음식 사진 분석, 맛집 추천, 레시피, 영양정보",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#10b981",
+  "background_color": "#F0F4F8",
+  "theme_color": "#F0F4F8",
   "orientation": "portrait-primary",
   "icons": [
     {

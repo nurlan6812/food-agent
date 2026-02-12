@@ -12,7 +12,7 @@ try:
 except ImportError:
     pass
 
-from ..config import settings
+from ..config import settings, ModelProvider
 from ..services import get_searcher
 
 
@@ -63,6 +63,7 @@ def _get_mime_type(path_or_url: str) -> str:
 
 def _analyze_with_gemini(image_source: str, image_url: str, search_results: str) -> str:
     """Gemini API로 이미지 + Google Lens 검색 결과를 종합 분석
+    (vLLM/Qwen 등 이미지를 직접 볼 수 없는 모델용)
 
     Args:
         image_source: 원본 이미지 소스 (로컬 경로 또는 URL)
@@ -113,17 +114,22 @@ def _analyze_with_gemini(image_source: str, image_url: str, search_results: str)
         return f"[Gemini 분석 실패: {e}]\n{search_results}"
 
 
+def _is_gemini_agent() -> bool:
+    """현재 에이전트가 Gemini 모델인지 확인"""
+    return settings.model_provider in (ModelProvider.GEMINI, "gemini")
+
+
 @tool
 def search_food_by_image(image_source: str) -> str:
     """
     새로운 음식 이미지가 있을 때만 사용하세요.
-    이미지 URL 또는 로컬 파일 경로를 받아 Google Lens + Gemini로 분석합니다.
+    이미지 URL 또는 로컬 파일 경로를 받아 Google Lens로 검색합니다.
 
     Args:
         image_source: 이미지 URL 또는 로컬 파일 경로 (필수)
 
     Returns:
-        Gemini 종합 분석 결과 (음식 이름, 식당, 메뉴, 가격 등)
+        Google Lens 검색 결과 (음식 이름, 식당, 메뉴, 썸네일 등)
     """
     writer = get_stream_writer()
 
@@ -153,12 +159,14 @@ def search_food_by_image(image_source: str) -> str:
     if "error" in result:
         return f"검색 실패: {result['error']}"
 
-    # 3. 검색 결과를 텍스트로 정리 (Gemini에 전달용)
+    # 3. 검색 결과를 텍스트로 정리
     raw_parts = []
     blog_links = []
-    thumbnails = []
+    thumbnails_with_titles = []  # (url, title) 쌍으로 저장
 
     visual = result.get("visual_matches", [])
+    all_thumbnails = []  # (thumbnail_url, 검색결과번호, 우선순위) 수집
+
     if visual:
         raw_parts.append("[Google Lens 검색 결과]")
         for i, v in enumerate(visual[:10], 1):
@@ -167,17 +175,28 @@ def search_food_by_image(image_source: str) -> str:
             link = v.get("link", "")
             thumbnail = v.get("thumbnail", "") or v.get("thumbnailUrl", "")
 
+            line_parts = []
             if title:
-                line = f"{i}. {title}"
-                if snippet:
-                    line += f" - {snippet[:100]}"
-                raw_parts.append(line)
+                line_parts.append(title)
+            if snippet:
+                line_parts.append(snippet[:100])
+            if line_parts:
+                raw_parts.append(f"{i}. {' - '.join(line_parts)}")
 
-            if thumbnail and len(thumbnails) < 3:
-                thumbnails.append(thumbnail)
+            is_blog = link and ('blog.naver.com' in link or 'tistory.com' in link)
+            is_korean = any(kw in (title + snippet) for kw in ['맛집', '메뉴', '후기', '리뷰', '식당', '피자', '치킨', '고기', '국수', '카페'])
 
-            if link and ('blog.naver.com' in link or 'tistory.com' in link):
+            if thumbnail:
+                # 블로그 > 한국어 음식 키워드 > 기타 순 우선순위
+                priority = 0 if is_blog else (1 if is_korean else 2)
+                all_thumbnails.append((thumbnail, str(i), priority))
+
+            if is_blog:
                 blog_links.append(link)
+
+        # 우선순위 정렬 후 상위 5개 선택
+        all_thumbnails.sort(key=lambda x: x[2])
+        thumbnails_with_titles = [(url, num) for url, num, _ in all_thumbnails[:5]]
 
     if blog_links:
         raw_parts.append("\n[블로그 본문]")
@@ -195,15 +214,20 @@ def search_food_by_image(image_source: str) -> str:
 
     search_text = "\n".join(raw_parts)
 
-    # 4. Gemini로 이미지 + 검색 결과 종합 분석
-    writer({"tool": "search_food_by_image", "status": "Gemini로 종합 분석 중..."})
-    analysis = _analyze_with_gemini(image_source, image_url, search_text)
+    # 4. 모델에 따라 분기
+    if _is_gemini_agent():
+        # Gemini 에이전트: 이미지를 직접 볼 수 있으므로 검색 결과만 전달
+        output = search_text
+    else:
+        # vLLM/Qwen 등: 이미지를 볼 수 없으므로 Gemini API로 별도 분석
+        writer({"tool": "search_food_by_image", "status": "Gemini로 종합 분석 중..."})
+        output = _analyze_with_gemini(image_source, image_url, search_text)
 
-    # 5. 썸네일 추가 (프론트엔드 이미지 표시용)
-    output = analysis
-    if thumbnails:
-        output += "\n\n[검색 결과 이미지]"
-        for url in thumbnails:
-            output += f"\n[IMAGE:{url}]"
+    # 5. 썸네일 URL을 검색결과 번호와 함께 추가
+    # AI가 위의 검색결과 목록(제목/snippet/블로그 본문)을 보고 식당 매칭
+    if thumbnails_with_titles:
+        output += "\n\n[검색 결과 썸네일 - 위 검색결과 번호에 대응]"
+        for url, num in thumbnails_with_titles:
+            output += f"\n[THUMBNAIL:{url}|#{num}]"
 
     return output if output else "검색 결과 없음"

@@ -41,11 +41,16 @@ class Settings(BaseModel):
         default_factory=lambda: os.getenv("VLLM_BASE_URL", "http://localhost:8001/v1")
     )
     vllm_model: str = Field(
-        default_factory=lambda: os.getenv(
-            "VLLM_MODEL",
-            "/home/ondamlab/.cache/huggingface/hub/models--cyankiwi--Qwen3-30B-A3B-Instruct-2507-AWQ-4bit/snapshots/main"
-        )
+        default_factory=lambda: os.getenv("VLLM_MODEL", "qwen3-next-80b")
     )
+
+    # 쿠팡 파트너스 설정
+    coupang_access_key: str = Field(default_factory=lambda: os.getenv("COUPANG_ACCESS_KEY", ""))
+    coupang_secret_key: str = Field(default_factory=lambda: os.getenv("COUPANG_SECRET_KEY", ""))
+
+    # 네이버 쇼핑 API 설정
+    naver_client_id: str = Field(default_factory=lambda: os.getenv("NAVER_CLIENT_ID", ""))
+    naver_client_secret: str = Field(default_factory=lambda: os.getenv("NAVER_CLIENT_SECRET", ""))
 
 
 # 전역 설정 인스턴스

@@ -35,37 +35,38 @@ def search_restaurant_info(query: str, page: int = 1) -> str:
     output = []
     place_id = None
 
+    coords_list = []
+
     if result and result.get("documents"):
         first_place = result["documents"][0]
         place_url = first_place.get("place_url", "")
         place_id = kakao.get_place_id_from_url(place_url) if place_url else None
 
-        coords_list = []
+        for i, place in enumerate(result["documents"][:5], 1):
+            name = place.get('place_name', '')
+            address = place.get('road_address_name', '') or place.get('address_name', '')
+            phone = place.get('phone', '')
+            category = place.get('category_name', '')
+            place_url = place.get('place_url', '')
 
-        for i, place in enumerate(result["documents"][:3], 1):
-            output.append(f"[{i}] {place.get('place_name', '')}")
-            output.append(f"   주소: {place.get('road_address_name', '') or place.get('address_name', '')}")
-            output.append(f"   전화: {place.get('phone', '')}")
-            output.append(f"   카테고리: {place.get('category_name', '')}")
-            p_url = place.get('place_url', '')
-            if p_url:
-                output.append(f"   🗺️ 지도: {p_url}")
+            output.append(f"[{i}] {name}")
+            output.append(f"   주소: {address}")
+            output.append(f"   전화: {phone}")
+            output.append(f"   카테고리: {category}")
+            if place_url:
+                output.append(f"   카카오맵: {place_url}")
             output.append("")
 
             x = place.get('x', '')
             y = place.get('y', '')
-            name = place.get('place_name', '')
-            address = place.get('road_address_name', '') or place.get('address_name', '')
-            phone = place.get('phone', '')
-            category = place.get('category_name', '').split(' > ')[-1] if place.get('category_name') else ''
-            place_url = place.get('place_url', '')
+            short_category = category.split(' > ')[-1] if category else ''
             if x and y:
-                info = f"{name}|{address}|{phone}|{category}|{place_url}"
+                info = f"{name}|{address}|{phone}|{short_category}|{place_url}"
                 coords_list.append(f"{y},{x},{info}")
 
-        if coords_list:
-            coords_str = ";".join(coords_list)
-            output.insert(0, f"[MAP:{coords_str}]")
+    if coords_list:
+        coords_str = ";".join(coords_list)
+        output.insert(0, f"[MAP:{coords_str}]")
 
     menu_text = ""
     if place_id and PLAYWRIGHT_AVAILABLE:

@@ -33,7 +33,7 @@ app = FastAPI(title="Korean Food Agent API", version="1.0.0")
 # CORS 설정 - 프론트엔드에서 접근 허용
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://food.jaekwang.store", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,7 +92,7 @@ class ChatResponse(BaseModel):
 
 
 def extract_media_tags(text: str) -> tuple[str, Optional[str], list[str]]:
-    """[MAP:...], [IMAGE:url] 태그 추출"""
+    """[MAP:...], [IMAGE:url], [RESTAURANTS_JSON:...], [PRODUCTS_JSON:...], [SUGGEST:...] 태그 추출"""
     map_url = None
     images = []
 
@@ -108,6 +108,19 @@ def extract_media_tags(text: str) -> tuple[str, Optional[str], list[str]]:
     images = re.findall(img_pattern, text)
     text = re.sub(img_pattern, '', text)
     text = re.sub(r'\[검색 결과 이미지\]\s*', '', text)
+
+    # RESTAURANTS_JSON 태그 제거 (AI가 텍스트에 포함했을 경우)
+    text = re.sub(r'\[RESTAURANTS_JSON:\[.*?\]\s*\]', '', text, flags=re.DOTALL)
+
+    # PRODUCTS_JSON 태그 제거
+    text = re.sub(r'\[PRODUCTS_JSON:\[.*?\]\s*\]', '', text, flags=re.DOTALL)
+
+    # SUGGEST 태그 제거
+    text = re.sub(r'\[SUGGEST:[^\]]+\]', '', text)
+
+    # THUMBNAIL 태그 제거
+    text = re.sub(r'\[THUMBNAIL:[^\]]+\]', '', text)
+    text = re.sub(r'\[검색 결과 썸네일\]\s*', '', text)
 
     # Plan: 내부 추론 제거
     text = re.sub(r'Plan:.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
@@ -186,6 +199,7 @@ async def chat_stream(request: ChatRequest):
             final_text = ""
             tool_map_url = None
             tool_images = []
+            tool_products = []
             text_started = False
 
             # 세션 ID 전송
@@ -226,11 +240,11 @@ async def chat_stream(request: ChatRequest):
                             logging.getLogger("uvicorn.error").warning(f"[TOOL_CALL] {tool_name} args={tool_args}")
                             yield f"data: {json.dumps({'type': 'tool', 'tool': tool_name, 'status': 'start'})}\n\n"
 
-                # 도구 완료 - 도구 결과에서 MAP 태그 직접 추출
+                # 도구 완료 - 도구 결과에서 MAP/RESTAURANTS/PRODUCTS 태그 직접 추출
                 elif hasattr(chunk, 'type') and chunk.type == "tool":
                     if current_tool:
                         yield f"data: {json.dumps({'type': 'tool', 'tool': current_tool, 'status': 'done'})}\n\n"
-                        # 도구 결과에서 MAP/IMAGE 태그 추출
+                        # 도구 결과에서 태그 추출
                         tool_content = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
                         map_match = re.search(r'\[MAP:([^\]]+)\]', tool_content)
                         if map_match and not tool_map_url:
@@ -238,6 +252,8 @@ async def chat_stream(request: ChatRequest):
                         img_matches = re.findall(r'\[IMAGE:(https?://[^\]]+)\]', tool_content)
                         if img_matches:
                             tool_images.extend(img_matches)
+
+                        # PRODUCTS_JSON은 도구 실행 중 전송하지 않음 (AI가 관련 상품만 골라서 작성)
                     current_tool = None
 
                 # AI 응답 텍스트
@@ -245,6 +261,8 @@ async def chat_stream(request: ChatRequest):
                     if not (hasattr(chunk, 'tool_calls') and chunk.tool_calls):
                         if isinstance(chunk.content, str):
                             txt = chunk.content
+                            # 제어 토큰 필터링 (Gemini가 가끔 출력)
+                            txt = re.sub(r'<ctrl\d+>', '', txt)
                             if not text_started:
                                 txt = txt.lstrip('\n')
                                 if txt:
@@ -264,14 +282,67 @@ async def chat_stream(request: ChatRequest):
                                         final_text += txt
                                         yield f"data: {json.dumps({'type': 'text', 'content': txt})}\n\n"
 
+
+
+            # RESTAURANTS_JSON 추출 (AI 텍스트에서)
+            enriched_coords = []  # 카카오 재검색으로 얻은 좌표
+            restaurants_json_match = re.search(r'\[RESTAURANTS_JSON:(\[.*?\])\s*\]', final_text, re.DOTALL)
+            if restaurants_json_match:
+                try:
+                    restaurants_list = json.loads(restaurants_json_match.group(1))
+                    if restaurants_list:
+                        from src.services.kakao import get_kakao
+                        from concurrent.futures import ThreadPoolExecutor
+                        _kakao = get_kakao()
+
+                        # 병렬 카카오 재검색
+                        names = [r.get('name', '') for r in restaurants_list]
+                        with ThreadPoolExecutor(max_workers=len(names)) as pool:
+                            results = list(pool.map(
+                                lambda n: _kakao.search_place_by_name(n) if n else None,
+                                names
+                            ))
+
+                        for r, place in zip(restaurants_list, results):
+                            if place:
+                                r['address'] = place.get('road_address_name', '') or place.get('address_name', '') or r.get('address', '')
+                                r['phone'] = place.get('phone', '') or r.get('phone', '')
+                                r['kakaoUrl'] = place.get('place_url', '')
+                                x, y = place.get('x', ''), place.get('y', '')
+                                if x and y:
+                                    info = f"{r.get('name','')}|{r.get('address','')}|{r.get('phone','')}|{r.get('category','')}|{r.get('kakaoUrl','')}"
+                                    enriched_coords.append(f"{y},{x},{info}")
+                            else:
+                                r['kakaoUrl'] = ''
+                        yield f"data: {json.dumps({'type': 'restaurants', 'restaurants': restaurants_list})}\n\n"
+                except json.JSONDecodeError:
+                    pass
+
+            # PRODUCTS_JSON 추출 (AI가 관련 상품만 골라서 작성한 것)
+            products_json_match = re.search(r'\[PRODUCTS_JSON:(\[.*?\])\s*\]', final_text, re.DOTALL)
+            if products_json_match:
+                try:
+                    products_list = json.loads(products_json_match.group(1))
+                    if products_list:
+                        yield f"data: {json.dumps({'type': 'products', 'products': products_list})}\n\n"
+                except json.JSONDecodeError:
+                    pass
+
+            # SUGGEST 태그 추출 (extract_media_tags 전에)
+            suggest_pattern = r'\[SUGGEST:([^\]]+)\]'
+            suggestions = re.findall(suggest_pattern, final_text)
+
             # 최종 미디어 태그 추출 결과
             text, map_url, images = extract_media_tags(final_text)
             # Qwen3가 태그를 안 넣었으면 도구 결과에서 추출한 것 사용
             if not map_url and tool_map_url:
                 map_url = tool_map_url
+            # 카카오 재검색 좌표를 항상 우선 사용 (더 정확한 매칭)
+            if enriched_coords:
+                map_url = ";".join(enriched_coords)
             if not images and tool_images:
                 images = tool_images
-            yield f"data: {json.dumps({'type': 'done', 'map_url': map_url, 'images': images})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'map_url': map_url, 'images': images, 'suggestions': suggestions[:3]})}\n\n"
 
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

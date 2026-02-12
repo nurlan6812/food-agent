@@ -72,11 +72,39 @@ class KakaoLocalAPI:
             for item in result.get("organic", [])[:5]:
                 title = item.get("title", "")
                 snippet = item.get("snippet", "")
+                date = item.get("date", "")
                 if snippet:
-                    output.append(f"{title}: {snippet}")
+                    prefix = f"({date}) " if date else ""
+                    output.append(f"{prefix}{title}: {snippet}")
             return "\n".join(output)
         except:
             return ""
+
+    def search_place_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """식당명으로 카카오 검색 (이름 매칭 검증)"""
+        if not self.api_key or not REQUESTS_AVAILABLE:
+            return None
+        headers = {"Authorization": f"KakaoAK {self.api_key}"}
+
+        def _name_matches(query_name: str, result_name: str) -> bool:
+            """검색한 식당명과 결과 식당명이 매칭되는지 확인"""
+            q = query_name.replace(" ", "")
+            r = result_name.replace(" ", "")
+            for suffix in ["점", "본점", "직영점"]:
+                q = q.split(suffix)[0] if suffix in q else q
+                r = r.split(suffix)[0] if suffix in r else r
+            return q in r or r in q
+
+        try:
+            params = {"query": name, "size": 5}
+            resp = requests.get(self.base_url, headers=headers, params=params, timeout=10)
+            if resp.status_code == 200:
+                for d in resp.json().get("documents", []):
+                    if _name_matches(name, d.get("place_name", "")):
+                        return d
+        except:
+            pass
+        return None
 
     def get_menu_via_playwright(self, place_id: str) -> str:
         """Playwright로 카카오맵에서 메뉴 텍스트 크롤링"""

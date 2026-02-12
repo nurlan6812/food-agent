@@ -1,10 +1,6 @@
 import type { ChatResponse } from './types';
 
-// 브라우저에서 실행 시 window.location 기반으로 API URL 결정
 function getApiBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    return `http://${window.location.hostname}:8000`;
-  }
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 }
 
@@ -39,7 +35,7 @@ export async function sendChatMessage(message: string): Promise<ChatResponse> {
 }
 
 export interface StreamEvent {
-  type: 'session' | 'tool' | 'tool_progress' | 'text' | 'done' | 'error';
+  type: 'session' | 'tool' | 'tool_progress' | 'text' | 'restaurants' | 'products' | 'done' | 'error';
   session_id?: string;
   tool?: string;
   status?: string;
@@ -47,6 +43,24 @@ export interface StreamEvent {
   map_url?: string;
   images?: string[];
   message?: string;
+  restaurants?: Array<{
+    name: string;
+    address?: string;
+    phone?: string;
+    category?: string;
+    kakaoUrl?: string;
+    description?: string;
+    imageUrl?: string;
+  }>;
+  products?: Array<{
+    name: string;
+    price?: number;
+    imageUrl?: string;
+    productUrl?: string;
+    isRocket?: boolean;
+    isFreeShipping?: boolean;
+  }>;
+  suggestions?: string[];
 }
 
 // File을 base64로 변환하는 유틸리티 함수

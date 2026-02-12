@@ -2,14 +2,28 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { ChatMessage } from '@/components/chat-message';
-import { ChatInput } from '@/components/chat-input';
+import { ChatInput, ChatInputHandle } from '@/components/chat-input';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { streamChatMessage, clearSession, StreamEvent } from '@/lib/api';
-import type { Message } from '@/lib/types';
-import { Loader2, Sparkles, RefreshCw } from 'lucide-react';
+import { WelcomeLanding } from '@/components/welcome-landing';
+import { AIAvatar } from '@/components/icons/ai-avatar';
+import { KFoodieLogo } from '@/components/icons/logo';
+import { streamChatMessage, clearSession } from '@/lib/api';
+import type { Message, RestaurantCardInfo, ProductCardInfo } from '@/lib/types';
+// Figma refresh icon (24x24)
+function RefreshIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <g clipPath="url(#clip_refresh)">
+        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="currentColor"/>
+      </g>
+      <defs>
+        <clipPath id="clip_refresh"><rect width="24" height="24" fill="white"/></clipPath>
+      </defs>
+    </svg>
+  );
+}
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { Button } from '@/components/ui/button';
 
 // 도구 이름 한글 매핑
 const TOOL_NAMES_KR: Record<string, string> = {
@@ -18,14 +32,17 @@ const TOOL_NAMES_KR: Record<string, string> = {
   search_recipe_online: '레시피 검색',
   get_restaurant_reviews: '후기 검색',
   get_nutrition_info: '영양 정보 검색',
+  search_coupang_products: '쿠팡 상품 검색',
+  search_naver_products: '네이버 쇼핑 검색',
+  search_recipe_ingredients: '재료 상품 검색',
 };
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [toolStatus, setToolStatus] = useState<string>('');
-  const [toolHistory, setToolHistory] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<ChatInputHandle>(null);
   const { toast } = useToast();
 
   const scrollToBottom = () => {
@@ -36,26 +53,9 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages, toolStatus]);
 
-  // 환영 메시지
-  useEffect(() => {
-    const welcomeMessage: Message = {
-      id: 'welcome',
-      role: 'assistant',
-      content: '안녕하세요! 한국 음식 AI입니다.\n\n음식 사진을 업로드하거나 질문을 남겨주시면 음식 정보와 맛집을 추천해드릴게요!',
-      timestamp: new Date(),
-    };
-    setMessages([welcomeMessage]);
-  }, []);
-
   const handleClearChat = () => {
     clearSession();
-    const welcomeMessage: Message = {
-      id: 'welcome-' + Date.now(),
-      role: 'assistant',
-      content: '새 대화가 시작되었습니다.\n\n무엇을 도와드릴까요?',
-      timestamp: new Date(),
-    };
-    setMessages([welcomeMessage]);
+    setMessages([]);
   };
 
   const handleSend = async (message: string, images: File[]) => {
@@ -70,40 +70,87 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
     setToolStatus('');
-    setToolHistory([]);
 
     try {
       let aiContent = '';
       let mapUrl: string | undefined;
       let aiImages: string[] = [];
+      let restaurants: RestaurantCardInfo[] = [];
+      let products: ProductCardInfo[] = [];
+      let suggestions: string[] = [];
+      let toolsUsed: string[] = [];
 
       for await (const event of streamChatMessage(message, images)) {
         switch (event.type) {
           case 'tool':
             if (event.status === 'start' && event.tool) {
+              if (!toolsUsed.includes(event.tool)) {
+                toolsUsed.push(event.tool);
+              }
               const toolName = TOOL_NAMES_KR[event.tool] || event.tool;
-              setToolHistory(prev => [...prev, toolName]);
-              setToolStatus(`${toolName} 중...`);
+              setToolStatus(`${toolName} 사용중`);
             } else if (event.status === 'done') {
               setToolStatus('');
             }
             break;
 
           case 'tool_progress':
-            // 🔥 실시간 도구 진행 상황 표시
             if (event.status) {
               setToolStatus(event.status);
             }
             break;
 
+          case 'restaurants':
+            if (event.restaurants) {
+              restaurants = [...restaurants, ...event.restaurants];
+              setMessages((prev) => {
+                const existing = prev.find((m) => m.id === 'ai-streaming');
+                if (existing) {
+                  return prev.map((m) =>
+                    m.id === 'ai-streaming' ? { ...m, restaurants } : m
+                  );
+                }
+                return [
+                  ...prev,
+                  {
+                    id: 'ai-streaming',
+                    role: 'assistant' as const,
+                    content: '',
+                    restaurants,
+                    timestamp: new Date(),
+                  },
+                ];
+              });
+            }
+            break;
+
+          case 'products':
+            if (event.products) {
+              products = [...products, ...event.products];
+              // 텍스트가 이미 있으면 바로 반영, 없으면 텍스트 올 때 같이 반영
+              setMessages((prev) => {
+                const existing = prev.find((m) => m.id === 'ai-streaming');
+                if (existing) {
+                  return prev.map((m) =>
+                    m.id === 'ai-streaming' ? { ...m, products } : m
+                  );
+                }
+                return prev;
+              });
+            }
+            break;
+
           case 'text':
             if (event.content) {
+              setToolStatus('');
               aiContent += event.content;
               setMessages((prev) => {
                 const existing = prev.find((m) => m.id === 'ai-streaming');
                 if (existing) {
                   return prev.map((m) =>
-                    m.id === 'ai-streaming' ? { ...m, content: filterContent(aiContent) } : m
+                    m.id === 'ai-streaming'
+                      ? { ...m, content: filterContent(aiContent), restaurants }
+                      : m
                   );
                 } else {
                   return [
@@ -112,6 +159,7 @@ export default function ChatPage() {
                       id: 'ai-streaming',
                       role: 'assistant' as const,
                       content: filterContent(aiContent),
+                      restaurants,
                       timestamp: new Date(),
                     },
                   ];
@@ -123,7 +171,20 @@ export default function ChatPage() {
           case 'done':
             mapUrl = event.map_url;
             aiImages = event.images || [];
+            suggestions = event.suggestions || [];
             setToolStatus('');
+            // done 즉시 카드+제안 칩 표시 (텍스트 스트리밍 끝난 직후)
+            setMessages((prev) => {
+              const existing = prev.find((m) => m.id === 'ai-streaming');
+              if (existing) {
+                return prev.map((m) =>
+                  m.id === 'ai-streaming'
+                    ? { ...m, products, suggestions }
+                    : m
+                );
+              }
+              return prev;
+            });
             break;
 
           case 'error':
@@ -141,6 +202,10 @@ export default function ChatPage() {
             content: filterContent(aiContent),
             mapUrl,
             images: aiImages,
+            restaurants,
+            products,
+            suggestions,
+            toolsUsed,
             timestamp: new Date(),
           },
         ];
@@ -153,7 +218,6 @@ export default function ChatPage() {
         description: error instanceof Error ? error.message : '메시지 전송에 실패했습니다.',
       });
 
-      // 스트리밍 중인 메시지 제거
       setMessages((prev) => prev.filter((m) => m.id !== 'ai-streaming'));
 
       const errorMessage: Message = {
@@ -166,35 +230,39 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
       setToolStatus('');
-      // 응답 완료 후 1.5초 뒤에 도구 히스토리 클리어
-      setTimeout(() => setToolHistory([]), 1500);
     }
   };
 
+  const handleFeatureSend = (message: string) => {
+    handleSend(message, []);
+  };
+
+  const handleOpenImagePicker = () => {
+    chatInputRef.current?.openImagePicker();
+  };
+
+  const hasMessages = messages.length > 0;
+
   return (
-    <div className="flex flex-col h-[100dvh] bg-gradient-to-b from-background to-muted/20">
+    <div className="flex flex-col h-[100dvh] bg-background">
       {/* 헤더 */}
-      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 safe-top">
+      <header className="sticky top-0 z-10 bg-background safe-top">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
-              <Sparkles className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">한국 음식 AI</h1>
-              <p className="text-xs text-muted-foreground">음식 추천 어시스턴트</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
+          <button onClick={handleClearChat} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <KFoodieLogo size={36} />
+            <h1 className="font-changa text-2xl tracking-tight flex items-center gap-3">
+              <span className="text-[#212121] dark:text-white">K-Foodie</span>
+              <span className="text-[#E02020]">AI</span>
+            </h1>
+          </button>
+          <div className="flex items-center gap-4">
+            <button
               onClick={handleClearChat}
-              className="h-9 w-9"
+              className="w-6 h-6 flex items-center justify-center text-[#89939E] hover:text-[#4D4D4D] transition-colors"
               aria-label="새 대화"
             >
-              <RefreshCw className="h-5 w-5" />
-            </Button>
+              <RefreshIcon />
+            </button>
             <ThemeToggle />
           </div>
         </div>
@@ -203,46 +271,47 @@ export default function ChatPage() {
       {/* 메시지 영역 */}
       <main className="flex-1 overflow-y-auto overscroll-contain">
         <div className="max-w-4xl mx-auto px-2 sm:px-0">
-          <div className="py-4">
-            {messages.map((message) => (
-              <ChatMessage key={message.id} message={message} />
-            ))}
-            {(isLoading || toolStatus || toolHistory.length > 0) && (
-              <div className="flex justify-start gap-3 px-4 py-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mt-1">
-                  <Loader2 className="h-5 w-5 text-primary animate-spin" />
-                </div>
-                <div className="flex flex-col gap-2">
-                  {toolHistory.length > 0 && (
-                    <div className="bg-muted/50 text-foreground rounded-2xl rounded-bl-md px-4 py-2 shadow-sm">
-                      <div className="text-xs font-medium text-muted-foreground mb-1">실행된 도구:</div>
-                      <div className="flex flex-wrap gap-1">
-                        {toolHistory.map((tool, idx) => (
-                          <span key={idx} className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                            {idx + 1}. {tool}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 bg-muted text-foreground rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
-                    <span className="text-sm">{toolStatus || 'AI가 응답을 생성하고 있습니다'}</span>
+          {!hasMessages ? (
+            /* 웰컴 랜딩 */
+            <div className="flex items-start sm:items-center justify-center min-h-full py-2 sm:py-0">
+              <WelcomeLanding
+                onSendMessage={handleFeatureSend}
+                onOpenImagePicker={handleOpenImagePicker}
+              />
+            </div>
+          ) : (
+            /* 채팅 메시지 */
+            <div className="py-4">
+              {messages.map((message) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  onSuggestionSelect={(suggestion) => handleSend(suggestion, [])}
+                />
+              ))}
+              {(isLoading && !messages.some(m => m.id === 'ai-streaming')) && (
+                <div className="flex justify-start px-4 py-3">
+                  <div className="flex items-center gap-3 bg-white rounded-[24px] px-4 py-4 shadow-sm">
+                    <AIAvatar size={24} />
+                    <span className="text-sm font-bold text-[#212121]">
+                      {toolStatus || 'AI가 응답을 생성하고 있습니다'}
+                    </span>
                     <div className="flex gap-1">
-                      <div className="w-2 h-2 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
-                      <div className="w-2 h-2 rounded-full bg-current animate-bounce [animation-delay:-0.15s]" />
-                      <div className="w-2 h-2 rounded-full bg-current animate-bounce" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#E02020] bouncing-dot" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#E02020] bouncing-dot" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#E02020] bouncing-dot" />
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
         </div>
       </main>
 
       {/* 입력 영역 */}
-      <ChatInput onSend={handleSend} disabled={isLoading} />
+      <ChatInput ref={chatInputRef} onSend={handleSend} disabled={isLoading} />
 
       <Toaster />
     </div>
@@ -251,11 +320,19 @@ export default function ChatPage() {
 
 // 내부 추론 및 태그 필터링
 function filterContent(text: string): string {
-  // Plan: 내부 추론 제거
   text = text.replace(/Plan:.*?(?=\n\n|\Z)/gs, '');
-  // [IMAGE:url], [MAP:url] 태그 제거 (UI에서 별도 처리)
   text = text.replace(/\[IMAGE:[^\]]+\]/g, '');
   text = text.replace(/\[MAP:[^\]]+\]/g, '');
   text = text.replace(/\[검색 결과 이미지\]\s*/g, '');
+  text = text.replace(/\[SUGGEST:[^\]]+\]/g, '');
+  text = text.replace(/\[RESTAURANTS_JSON:\[.*?\]\]/g, '');
+  text = text.replace(/\[PRODUCTS_JSON:\[.*?\]\]/g, '');
+  // 스트리밍 중 불완전한 태그도 제거 (아직 닫히지 않은 태그)
+  text = text.replace(/\[MAP:.*$/s, '');
+  text = text.replace(/\[RESTAURANTS_JSON:.*$/s, '');
+  text = text.replace(/\[PRODUCTS_JSON:.*$/s, '');
+  text = text.replace(/\[SUGGEST:.*$/s, '');
+  text = text.replace(/\[THUMBNAIL:[^\]]+\]/g, '');
+  text = text.replace(/\[검색 결과 썸네일\]\s*/g, '');
   return text.trim();
 }

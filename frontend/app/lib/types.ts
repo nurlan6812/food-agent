@@ -1,21 +1,37 @@
+export interface RestaurantCardInfo {
+  name: string;
+  address?: string;
+  phone?: string;
+  category?: string;
+  kakaoUrl?: string;
+  description?: string;
+  imageUrl?: string;
+}
+
+export interface ProductCardInfo {
+  name: string;
+  price?: number;
+  imageUrl?: string;
+  productUrl?: string;
+  description?: string;
+  mall?: string;
+  brand?: string;
+  category?: string;
+  isRocket?: boolean;
+  isFreeShipping?: boolean;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   images?: string[];
-  restaurant?: RestaurantInfo;
+  restaurants?: RestaurantCardInfo[];
+  products?: ProductCardInfo[];
   mapUrl?: string;
+  suggestions?: string[];
+  toolsUsed?: string[];
   timestamp: Date;
-}
-
-export interface RestaurantInfo {
-  name: string;
-  cuisine: string;
-  rating?: number;
-  address?: string;
-  phone?: string;
-  description?: string;
-  imageUrl?: string;
 }
 
 export interface ChatRequest {

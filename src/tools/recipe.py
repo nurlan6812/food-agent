@@ -1,7 +1,13 @@
 """레시피 검색 도구"""
 
+import re
 from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
+
+
+def _safe_tilde(text: str) -> str:
+    """숫자~숫자 패턴의 반각~를 전각～로 치환 (AI가 ~를 누락하는 문제 방지)"""
+    return re.sub(r'(\d+)~(\d+)', r'\1～\2', text)
 
 try:
     import requests
@@ -81,7 +87,7 @@ def _crawl_recipe_fast(url: str) -> str:
                         step = step[:200] + "..."
                     output.append(f"  {i}. {step}")
 
-            return "\n".join(output)
+            return _safe_tilde("\n".join(output))
 
         # 네이버 블로그 / 티스토리 / 기타
         else:
@@ -99,7 +105,7 @@ def _crawl_recipe_fast(url: str) -> str:
                 text = content.get_text(separator='\n')
                 lines = [l.strip() for l in text.split('\n') if l.strip()]
                 body_text = '\n'.join(lines)[:3500]
-                return f"[레시피]\n출처: {url}\n\n{body_text}"
+                return _safe_tilde(f"[레시피]\n출처: {url}\n\n{body_text}")
 
     except Exception as e:
         return f"크롤링 실패: {str(e)}\nURL: {url}"

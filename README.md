@@ -1,179 +1,293 @@
-# Korean Food Agent 🍜
+# K-Foodie AI
 
-LangGraph + Gemini 기반 한국 음식 AI 에이전트
+> LangGraph + Gemini 기반 한국 음식 전문 AI 에이전트 (PWA)
 
-음식 이미지를 분석하고, 식당 정보를 검색하며, 레시피와 영양정보를 제공하는 멀티모달 AI 에이전트입니다.
+음식 이미지 분석, 맛집 검색, 레시피/영양정보 제공, 식당 후기 요약, 식재료 쇼핑까지 지원하는 멀티모달 AI 챗봇입니다.
 
-## ✨ 주요 기능
+**Live Demo**: [food.jaekwang.store](https://food.jaekwang.store)
+
+---
+
+## 주요 기능
 
 | 기능 | 설명 | 도구 |
 |------|------|------|
-| 🔍 **음식 이미지 인식** | Google Lens로 음식/식당 파악 | `search_food_by_image` |
-| 🏪 **식당 검색** | 카카오맵 API + Playwright 크롤링으로 식당 정보 및 메뉴 조회 | `search_restaurant_info` |
-| 📝 **후기 분석** | 카카오맵 후기 크롤링 및 AI 요약 | `get_restaurant_reviews` |
-| 🍳 **레시피 검색** | 만개의레시피 등에서 크롤링 | `search_recipe_online` |
-| 📊 **영양정보** | 칼로리, 단백질 등 영양성분 검색 | `get_nutrition_info` |
-| 💾 **이미지 수집** | 새 음식 이미지 Supabase DB 저장 | `save_food_image`, `update_food_image` |
+| **음식 이미지 인식** | 사진을 올리면 음식명/식당을 파악 | `search_food_by_image` |
+| **맛집 검색** | 지역+조건 기반 식당 추천 + 카카오맵 연동 | `search_restaurant_info` |
+| **식당 후기 요약** | 카카오맵 방문자 후기 크롤링 및 AI 요약 | `get_restaurant_reviews` |
+| **레시피 검색** | 만개의레시피 등에서 레시피 크롤링 | `search_recipe_online` |
+| **영양정보** | 칼로리, 단백질 등 영양성분 검색 | `get_nutrition_info` |
+| **식재료 쇼핑** | 네이버 쇼핑에서 재료 구매 링크 제공 | `search_naver_products`, `search_recipe_ingredients` |
+| **범용 웹검색** | 다른 도구로 답할 수 없는 음식 관련 질문 처리 | `web_search` |
 
-## 🛠️ 기술 스택
+---
+
+## 아키텍처
+
+### 전체 시스템 흐름
+
+```
+사용자 (PWA)
+    │  텍스트/이미지 입력
+    ▼
+Next.js 프론트엔드 (port 3000)
+    │  SSE 스트리밍
+    ▼
+FastAPI 백엔드 (port 8000)
+    │  LangGraph ReAct Agent
+    ▼
+Gemini Flash (LLM)
+    │  도구 호출 결정
+    ▼
+┌──────────────────────────────────────┐
+│           도구 (Tools)                │
+├──────────────────────────────────────┤
+│ search_food_by_image  → Serper.dev   │
+│ search_restaurant_info → Kakao API   │
+│ get_restaurant_reviews → Playwright  │
+│ search_recipe_online   → 웹 크롤링   │
+│ get_nutrition_info     → 웹 검색     │
+│ search_naver_products  → 네이버 API  │
+│ web_search             → Serper.dev  │
+└──────────────────────────────────────┘
+    │
+    ▼
+백엔드 후처리
+  - 식당 카드: AI 응답에서 RESTAURANTS_JSON 추출 → 카카오 재검색(병렬)으로 검증
+  - 상품 카드: AI가 관련 상품만 큐레이션
+  - 지도: 검증된 좌표로 카카오맵 렌더링
+  - 제안 칩: SUGGEST 태그 추출
+    │
+    ▼
+SSE 이벤트 스트림
+  → tool (도구 진행 상황)
+  → text (AI 응답 텍스트)
+  → restaurants (식당 카드 데이터)
+  → products (상품 카드 데이터)
+  → done (지도 좌표 + 제안 칩)
+```
+
+### 식당 검색 파이프라인
+
+```
+1. 카카오 로컬 API (FD6 카테고리)
+   → 식당 5개 + 주소/전화/좌표/kakaoUrl
+   │
+2. 메뉴 정보 수집
+   ├─ Playwright: 카카오맵 메뉴탭 크롤링 (우선)
+   └─ Serper: 구글 검색 폴백 (날짜 포함)
+   │
+3. AI가 추천 텍스트 + RESTAURANTS_JSON 작성
+   │
+4. 백엔드 검증 (병렬 처리)
+   ├─ 각 식당명으로 카카오 재검색
+   ├─ _name_matches()로 이름 매칭 검증
+   ├─ 매칭 성공 → 진짜 kakaoUrl/주소/좌표로 덮어씀
+   └─ 매칭 실패 → 가짜 URL 제거
+```
+
+---
+
+## 기술 스택
 
 ### Backend
+
 | 레이어 | 기술 | 설명 |
 |--------|------|------|
-| **LLM** | Gemini 3.0 Flash | 멀티모달 언어 모델 |
-| **에이전트** | LangGraph | ReAct 패턴 구현 |
-| **메모리** | MemorySaver | 대화 히스토리 자동 관리 |
-| **API** | FastAPI | 스트리밍 지원 백엔드 |
-| **DB** | Supabase | PostgreSQL + Storage |
-| **크롤링** | Playwright | 동적 웹 크롤링 |
+| LLM | Gemini Flash | 멀티모달 (텍스트+이미지), 스트리밍 |
+| LLM (대체) | GPT-4o / Qwen3 (vLLM) | OpenAI 또는 로컬 추론 |
+| 에이전트 | LangGraph | ReAct 패턴, 도구 호출 |
+| API 서버 | FastAPI | SSE 스트리밍, 세션 관리 |
+| 크롤링 | Playwright | 메뉴/후기 동적 크롤링 |
+| 검색 | Serper.dev | Google Lens + 웹 검색 |
 
 ### Frontend
-- **Framework**: Next.js 16 (React 19)
-- **Styling**: Tailwind CSS
-- **UI Components**: shadcn/ui, Radix UI
-- **Map**: 카카오맵 JavaScript SDK
 
-### External APIs
-- **Google Lens**: Serper.dev (이미지 검색)
-- **Kakao Local API**: 식당 검색
-- **Web Search**: Serper.dev (텍스트 검색)
+| 레이어 | 기술 | 설명 |
+|--------|------|------|
+| 프레임워크 | Next.js 16 (React 19) | App Router, SSR |
+| 스타일링 | Tailwind CSS 3.4 | 반응형, 다크모드 |
+| UI 컴포넌트 | shadcn/ui + Radix UI | 접근성 지원 |
+| 지도 | 카카오맵 JS SDK | 식당 위치 마커 |
+| 마크다운 | React-Markdown + GFM | 채팅 메시지 렌더링 |
+| PWA | next-pwa | 모바일 앱 설치 가능 |
 
-## 📁 프로젝트 구조
+### 외부 API
+
+| 서비스 | 용도 | 비용 |
+|--------|------|------|
+| Google AI (Gemini) | 멀티모달 LLM | 무료 티어 제공 |
+| Serper.dev | 이미지/웹 검색 | 무료 2,500회/월 |
+| Kakao Developers | 식당 검색 + 지도 | 무료 |
+| Naver Developers | 쇼핑 상품 검색 | 무료 25,000회/일 |
+| Coupang Partners | 제휴 상품 링크 (선택) | 무료 (커미션 기반) |
+
+---
+
+## 프로젝트 구조
 
 ```
-food_agent/
+food-agent/
 ├── api/
-│   └── main.py                 # FastAPI 백엔드 (SSE 스트리밍)
+│   └── main.py                    # FastAPI 백엔드 (SSE 스트리밍, 세션 관리, 후처리)
+│
 ├── src/
-│   ├── agent.py                # LangGraph ReAct 에이전트
-│   ├── config.py               # 설정 관리
-│   ├── db/
-│   │   └── client.py           # Supabase 클라이언트
-│   ├── services/
-│   │   ├── serper.py           # Google Lens + 텍스트 검색
-│   │   └── kakao.py            # 카카오맵 API + Playwright
-│   └── tools/                  # LangChain 도구들
-│       ├── image.py            # search_food_by_image
-│       ├── restaurant.py       # search_restaurant_info, get_restaurant_reviews
-│       ├── recipe.py           # search_recipe_online
-│       ├── nutrition.py        # get_nutrition_info
-│       ├── save_image.py       # save_food_image
-│       └── update_image.py     # update_food_image
-├── frontend/app/               # Next.js 프론트엔드
+│   ├── agent.py                   # LangGraph ReAct 에이전트 + 시스템 프롬프트
+│   ├── config.py                  # 설정 관리 (ModelProvider, API 키)
+│   ├── local_llm.py               # 로컬 LLM 지원 (GLM-4V)
+│   │
+│   ├── services/                  # 외부 API 클라이언트
+│   │   ├── kakao.py               # 카카오 로컬 API + Playwright 메뉴/후기 크롤링
+│   │   ├── serper.py              # Google Lens + 웹 검색 (Serper.dev)
+│   │   ├── naver_shopping.py      # 네이버 쇼핑 API
+│   │   ├── coupang.py             # 쿠팡 파트너스 API (HMAC-SHA256)
+│   │   └── summarizer.py          # 후기 요약 (LLM 기반)
+│   │
+│   └── tools/                     # LangChain 도구
+│       ├── image.py               # search_food_by_image (멀티모달)
+│       ├── restaurant.py          # search_restaurant_info, get_restaurant_reviews
+│       ├── recipe.py              # search_recipe_online
+│       ├── nutrition.py           # get_nutrition_info
+│       ├── naver_shopping.py      # search_naver_products, search_recipe_ingredients
+│       ├── coupang.py             # search_coupang_products
+│       └── web_search.py          # web_search (범용 웹검색 폴백)
+│
+├── frontend/app/
 │   ├── app/
-│   │   ├── page.tsx           # 메인 채팅 페이지
-│   │   ├── layout.tsx         # 루트 레이아웃
-│   │   └── globals.css        # 글로벌 스타일
-│   ├── components/            # React 컴포넌트
-│   │   ├── chat-input.tsx
-│   │   ├── chat-message.tsx
-│   │   ├── map-embed.tsx
-│   │   ├── image-gallery.tsx
-│   │   ├── restaurant-card.tsx
-│   │   ├── theme-toggle.tsx
-│   │   └── ui/                # shadcn/ui 컴포넌트
-│   ├── hooks/
-│   │   └── use-toast.ts       # Toast 알림 훅
-│   └── lib/
-│       ├── api.ts             # 백엔드 API 클라이언트
-│       ├── types.ts           # TypeScript 타입
-│       └── utils.ts           # 유틸리티 함수
-├── docs/
-│   ├── deployment.md          # 배포 가이드
-│   ├── research_note.md       # 상세 기술 문서
-│   └── supabase_schema.sql    # DB 스키마
-├── scripts/
-│   └── benchmark_latency.py   # 성능 측정
-├── requirements.txt           # Python 의존성 (18개)
-├── setup.sh                   # 자동 설치 스크립트
-├── run_all.sh                 # 서버 실행 스크립트
-├── .env.example               # 환경 변수 템플릿 (10개)
-├── README.md                  # 이 파일
-├── QUICK_START.md             # 5분 빠른 시작
-├── VERIFICATION.md            # 코드 검증 결과
-└── STRUCTURE.md               # 전체 폴더 구조
+│   │   ├── page.tsx               # 메인 채팅 페이지 (SSE 스트리밍 클라이언트)
+│   │   ├── layout.tsx             # 루트 레이아웃 (폰트, 카카오맵 SDK)
+│   │   └── globals.css            # 글로벌 스타일
+│   │
+│   ├── components/
+│   │   ├── chat-input.tsx         # 텍스트/이미지 입력 (다중 이미지, 압축)
+│   │   ├── chat-message.tsx       # AI 메시지 렌더링 (마크다운 + 구조화 데이터)
+│   │   ├── welcome-landing.tsx    # 웰컴 화면 (기능 카드 + 예시 프롬프트)
+│   │   ├── restaurant-carousel.tsx # 식당 카드 캐러셀 (이미지, 카카오맵 링크)
+│   │   ├── restaurant-card.tsx    # 개별 식당 카드
+│   │   ├── product-carousel.tsx   # 상품 카드 캐러셀
+│   │   ├── map-embed.tsx          # 카카오맵 (다중 마커, 클릭 인터랙션)
+│   │   ├── suggestion-chips.tsx   # 후속 질문 제안 칩
+│   │   ├── feature-card.tsx       # 기능 소개 카드
+│   │   ├── image-gallery.tsx      # 이미지 갤러리 (라이트박스)
+│   │   ├── theme-toggle.tsx       # 다크모드 토글
+│   │   └── icons/                 # SVG 아이콘 (로고, AI 아바타)
+│   │
+│   ├── lib/
+│   │   ├── api.ts                 # SSE 스트리밍 API 클라이언트
+│   │   ├── types.ts               # TypeScript 타입 정의
+│   │   ├── parse-response.ts      # 응답 파싱 유틸리티
+│   │   └── utils.ts               # 유틸 함수
+│   │
+│   └── public/
+│       ├── manifest.json          # PWA 매니페스트
+│       ├── logo-icon.svg          # 앱 로고
+│       └── icons/                 # 앱 아이콘 (192x192, 512x512)
+│
+├── requirements.txt               # Python 의존성
+├── .env.example                   # 환경 변수 템플릿
+├── setup.sh                       # 자동 설치 스크립트
+└── run_all.sh                     # 서버 실행 스크립트
 ```
 
-> **참고**: 전체 폴더 구조는 [STRUCTURE.md](STRUCTURE.md)를 참고하세요.
+---
 
-## 🚀 빠른 시작 (5분)
+## SSE 스트리밍 프로토콜
+
+프론트엔드와 백엔드는 Server-Sent Events로 통신합니다.
+
+| 이벤트 타입 | 시점 | 데이터 |
+|------------|------|--------|
+| `session` | 연결 시 | `{ session_id }` |
+| `tool` | 도구 시작/완료 | `{ tool, status: "start"/"done" }` |
+| `tool_progress` | 도구 진행 중 | `{ tool, status: "메뉴 검색 중..." }` |
+| `text` | AI 응답 스트리밍 | `{ content: "텍스트 조각" }` |
+| `restaurants` | 도구 완료 후 | `{ restaurants: [{name, address, phone, category, kakaoUrl, imageUrl}] }` |
+| `products` | 도구 완료 후 | `{ products: [{name, price, imageUrl, productUrl, mall}] }` |
+| `done` | 최종 | `{ map_url, images, suggestions }` |
+| `error` | 오류 시 | `{ message }` |
+
+**스트리밍 UX 순서:**
+1. "식당 정보 검색 사용중" 로딩 표시
+2. AI 텍스트 점진적 표시
+3. 텍스트 완료 → 식당/상품 카드 표시
+4. 지도 렌더링 + 제안 칩 표시
+
+---
+
+## 빠른 시작
 
 ### 사전 준비
 
-**필수 API 키 발급:**
+**필수 API 키:**
 - [Google AI (Gemini)](https://aistudio.google.com/app/apikey) - 무료
 - [Serper.dev](https://serper.dev/) - 무료 2,500회/월
-- [카카오 Developers](https://developers.kakao.com/) - 무료
-- [Supabase](https://supabase.com/) - 무료 500MB
+- [카카오 Developers](https://developers.kakao.com/) - REST API 키 + JavaScript 키
+
+**선택 API 키:**
+- [네이버 Developers](https://developers.naver.com/) - 쇼핑 검색
+- [쿠팡 파트너스](https://partners.coupang.com/) - 제휴 상품
 
 ### 1. 설치
 
 ```bash
-# 저장소 클론
 git clone https://github.com/nurlan6812/food-agent.git
-cd food_agent
-
-# 자동 설치 실행
+cd food-agent
 ./setup.sh
 ```
 
 ### 2. 환경 변수 설정
 
 ```bash
+cp .env.example .env
 nano .env
 ```
 
-**필수 5개만 입력:**
+**필수 항목:**
 ```env
-GOOGLE_API_KEY=실제-구글-API-키
-SERPER_API_KEY=실제-Serper-API-키
-KAKAO_API_KEY=실제-카카오-API-키
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=실제-Supabase-Anon-Key
+GOOGLE_API_KEY=your-google-api-key
+SERPER_API_KEY=your-serper-api-key
+KAKAO_API_KEY=your-kakao-rest-api-key
 ```
 
-### 3. Supabase 설정
+**프론트엔드 카카오맵:**
+```env
+NEXT_PUBLIC_KAKAO_JS_KEY=your-kakao-js-key
+```
 
-**① 테이블 생성**
-1. Supabase Dashboard → SQL Editor
-2. `docs/supabase_schema.sql` 내용 복사
-3. 실행 (Run)
+**모델 설정 (기본값: Gemini):**
+```env
+MODEL_PROVIDER=gemini
+GEMINI_MODEL=gemini-2.0-flash
+```
 
-**② Storage 버킷 생성**
-1. Supabase Dashboard → Storage
-2. Create bucket → 이름: `images`, Public 체크
-3. Policies → Allow public access
-
-### 4. 실행
+### 3. 실행
 
 ```bash
 ./run_all.sh
 ```
 
-**접속:**
-- 🎨 프론트엔드: http://localhost:3000
-- 🔧 백엔드 API: http://localhost:8000
-
-끝! 🎉
+- 프론트엔드: http://localhost:3000
+- 백엔드 API: http://localhost:8000
 
 ---
 
-## 📖 사용 예시
+## 사용 예시
 
 ### 웹 인터페이스
-1. http://localhost:3000 접속
-2. 음식 이미지 업로드 또는 텍스트로 질문
-3. 실시간 스트리밍 응답 확인
+
+1. http://localhost:3000 접속 (또는 모바일에서 PWA 설치)
+2. 웰컴 화면에서 기능 선택 또는 직접 입력
+3. 실시간 스트리밍 응답 + 식당 카드/지도/제안 칩 확인
 
 ### Python API
 
 ```python
 from src.agent import KoreanFoodAgent
 
-agent = KoreanFoodAgent()
+agent = KoreanFoodAgent(provider="gemini")
 
 # 텍스트 질문
-response = agent.chat("강남역 맛집 추천해줘")
+response = agent.chat("강남역 혼밥 맛집 추천해줘")
 
 # 이미지 질문
 response = agent.chat("/path/to/food.jpg 이 음식 뭐야?")
@@ -189,20 +303,25 @@ for chunk in agent.stream("김치찌개 레시피 알려줘"):
 # 동기 채팅
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "불고기 레시피"}'
+  -d '{"message": "성수동 브런치 카페 추천"}'
 
 # 스트리밍 채팅 (SSE)
-curl -N http://localhost:8000/chat/stream \
+curl -N -X POST http://localhost:8000/chat/stream \
   -H "Content-Type: application/json" \
-  -d '{"message": "불고기 레시피"}'
+  -d '{"message": "김치찌개 레시피 알려줘"}'
+
+# 세션 초기화
+curl -X POST http://localhost:8000/session/clear?session_id=your-session-id
 ```
 
-## 🔧 개발
+---
+
+## 개발
 
 ### 수동 설치
 
 ```bash
-# Python 패키지
+# Python
 pip install -r requirements.txt
 playwright install chromium
 
@@ -214,24 +333,27 @@ npm install
 ### 개별 실행
 
 ```bash
-# 백엔드만
-python -m uvicorn api.main:app --reload --port 8000
+# 백엔드 (핫 리로드)
+python -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
-# 프론트엔드만
+# 프론트엔드 (개발 모드)
 cd frontend/app && npm run dev
 ```
 
-### 코드 구조
+### LLM 모델 변경
 
-- **에이전트**: `src/agent.py` - LangGraph ReAct 에이전트
-- **도구들**: `src/tools/` - 7개 LangChain 도구
-- **서비스**: `src/services/` - 외부 API 클라이언트
-- **백엔드**: `api/main.py` - FastAPI SSE 스트리밍
-- **프론트엔드**: `frontend/app/` - Next.js 채팅 UI
+`.env`에서 `MODEL_PROVIDER`를 변경:
 
-## 🌐 배포
+| Provider | 설정 | 용도 |
+|----------|------|------|
+| `gemini` | `GEMINI_MODEL=gemini-2.0-flash` | 기본 (추천) |
+| `openai` | `OPENAI_MODEL=gpt-4o` | OpenAI 사용 시 |
+| `vllm` | `VLLM_BASE_URL=http://localhost:8001/v1` | 로컬 GPU 추론 |
+| `local` | `LOCAL_MODEL_PATH=/path/to/model` | GLM-4V 로컬 |
 
-상세한 배포 가이드는 [docs/deployment.md](docs/deployment.md)를 참고하세요.
+---
+
+## 배포
 
 ### 프로덕션 실행
 
@@ -242,51 +364,50 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
 # 프론트엔드
 cd frontend/app
 npm run build
-npm start
+npx next start -p 3000 --hostname 0.0.0.0
 ```
 
-## 📊 성능
-
-- **Gemini 2.0 Flash 응답 속도**: 5-10초 (API 지연 포함)
-- **스트리밍 지연**: 실시간 토큰 출력
-- **도구 호출**: 병렬 처리 지원
-- **이미지 검색**: Google Lens 기반
-
-## 🧪 테스트
+### Cloudflare Tunnel (HTTPS)
 
 ```bash
-# Gemini 레이턴시 측정
-python scripts/benchmark_latency.py
+cloudflared tunnel --config ~/.cloudflared/config.yml run
 ```
 
-## 🔐 보안
+```yaml
+# ~/.cloudflared/config.yml
+tunnel: your-tunnel-id
+ingress:
+  - hostname: food.yourdomain.com
+    service: http://localhost:3000
+  - hostname: api.yourdomain.com
+    service: http://localhost:8000
+  - service: http_status:404
+```
 
-- Supabase RLS 정책 적용
-- Storage 공개 버킷 사용 (이미지)
+### PWA 모바일 설치
+
+1. 모바일 브라우저에서 사이트 접속
+2. "홈 화면에 추가" 선택
+3. 앱처럼 사용 가능
+
+---
+
+## 보안
+
 - API 키는 `.env`에서 관리 (Git 제외)
-- CORS 설정 필요 (프로덕션)
+- CORS: 프로덕션 도메인만 허용
+- AI kakaoUrl 날조 방지: 카카오 재검색으로 항상 검증
+- Serper 검색 결과 날짜 표시: 오래된 가격 정보 안내
 
-## 🤝 기여
+---
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## 외부 참고
 
-## 📄 라이선스
+- [LangGraph](https://langchain-ai.github.io/langgraph/)
+- [Gemini API](https://ai.google.dev/)
+- [Serper.dev](https://serper.dev/)
+- [카카오 Developers](https://developers.kakao.com/)
+
+## 라이선스
 
 MIT License
-
-## 📚 추가 문서
-
-- [상세 기술 문서](docs/research_note.md)
-- [배포 가이드](docs/deployment.md)
-- [Supabase 스키마](docs/supabase_schema.sql)
-
-## 💡 참고
-
-- **LangGraph**: https://langchain-ai.github.io/langgraph/
-- **Gemini API**: https://ai.google.dev/
-- **Serper.dev**: https://serper.dev/
-- **Supabase**: https://supabase.com/
