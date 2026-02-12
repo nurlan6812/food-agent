@@ -138,7 +138,7 @@ def search_recipe_online(query: str) -> str:
     if not organic:
         return f"'{query}' 검색 결과가 없습니다."
 
-    writer({"tool": "search_recipe_online", "status": "레시피 페이지 분석 중..."})
+    writer({"tool": "search_recipe_online", "status": "레시피 정리 중..."})
     output = [f"[검색: {query}]"]
     for i, item in enumerate(organic[:1], 1):
         link = item.get("link", "")

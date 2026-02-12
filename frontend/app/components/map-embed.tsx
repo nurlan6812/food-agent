@@ -21,6 +21,7 @@ interface PlaceInfo {
   phone?: string;
   category?: string;
   kakaoUrl?: string;
+  originalIndex?: number; // 1-based card index from backend
 }
 
 // URL에서 좌표 추출 (여러 좌표 지원)
@@ -34,7 +35,7 @@ function parseCoordinates(url: string): PlaceInfo[] {
       const [lat, lng, ...infoParts] = part.split(',');
       if (lat && lng) {
         const infoStr = infoParts.join(',');
-        const [name, address, phone, category, kakaoUrl] = infoStr.split('|');
+        const [name, address, phone, category, kakaoUrl, origIdx] = infoStr.split('|');
         places.push({
           lat: parseFloat(lat),
           lng: parseFloat(lng),
@@ -43,6 +44,7 @@ function parseCoordinates(url: string): PlaceInfo[] {
           phone: phone || undefined,
           category: category || undefined,
           kakaoUrl: kakaoUrl || undefined,
+          originalIndex: origIdx ? parseInt(origIdx) : undefined,
         });
       }
     }
@@ -62,11 +64,11 @@ function parseCoordinates(url: string): PlaceInfo[] {
   return places;
 }
 
-// 마커 색상
-const MARKER_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1'];
+// 마커 색상 (카드 번호 배지와 동일한 색상 사용)
+export const MARKER_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#F7B731', '#A55EEA'];
 
 // 마커 요소 생성 (DOM API 사용)
-function createMarkerElement(index: number, color: string, isSelected: boolean): HTMLDivElement {
+function createMarkerElement(displayNumber: number, color: string, isSelected: boolean): HTMLDivElement {
   const wrapper = document.createElement('div');
   const marker = document.createElement('div');
 
@@ -87,7 +89,7 @@ function createMarkerElement(index: number, color: string, isSelected: boolean):
     transition: 'all 0.2s',
     transform: isSelected ? 'scale(1.1)' : 'scale(1)',
   });
-  marker.textContent = String(index + 1);
+  marker.textContent = String(displayNumber);
 
   wrapper.appendChild(marker);
   return wrapper;
@@ -146,7 +148,10 @@ export function MapEmbed({ url }: MapEmbedProps) {
 
           // 모든 마커 스타일 업데이트
           markersRef.current.forEach((m, i) => {
-            const newMarker = createMarkerElement(i, MARKER_COLORS[i % MARKER_COLORS.length], i === clickedIndex);
+            const p = places[i];
+            const displayNum = p.originalIndex ?? (i + 1);
+            const colorIdx = (p.originalIndex ? p.originalIndex - 1 : i) % MARKER_COLORS.length;
+            const newMarker = createMarkerElement(displayNum, MARKER_COLORS[colorIdx], i === clickedIndex);
             m.element.replaceWith(newMarker);
             m.element = newMarker;
 
@@ -160,8 +165,10 @@ export function MapEmbed({ url }: MapEmbedProps) {
           const position = new window.kakao.maps.LatLng(place.lat, place.lng);
           bounds.extend(position);
 
-          const color = MARKER_COLORS[index % MARKER_COLORS.length];
-          const markerContent = createMarkerElement(index, color, false);
+          const displayNum = place.originalIndex ?? (index + 1);
+          const colorIdx = (place.originalIndex ? place.originalIndex - 1 : index) % MARKER_COLORS.length;
+          const color = MARKER_COLORS[colorIdx];
+          const markerContent = createMarkerElement(displayNum, color, false);
 
           const customOverlay = new window.kakao.maps.CustomOverlay({
             position: position,
@@ -267,9 +274,9 @@ export function MapEmbed({ url }: MapEmbedProps) {
                 <div className="flex items-center gap-3">
                   <div
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                    style={{ backgroundColor: MARKER_COLORS[selectedIndex % MARKER_COLORS.length] }}
+                    style={{ backgroundColor: MARKER_COLORS[((selectedPlace.originalIndex ? selectedPlace.originalIndex - 1 : selectedIndex) % MARKER_COLORS.length)] }}
                   >
-                    {selectedIndex + 1}
+                    {selectedPlace.originalIndex ?? (selectedIndex + 1)}
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground text-base">{selectedPlace.name}</h3>

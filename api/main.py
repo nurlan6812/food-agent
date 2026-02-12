@@ -303,14 +303,15 @@ async def chat_stream(request: ChatRequest):
                                 names
                             ))
 
-                        for r, place in zip(restaurants_list, results):
+                        for idx, (r, place) in enumerate(zip(restaurants_list, results)):
                             if place:
                                 r['address'] = place.get('road_address_name', '') or place.get('address_name', '') or r.get('address', '')
                                 r['phone'] = place.get('phone', '') or r.get('phone', '')
                                 r['kakaoUrl'] = place.get('place_url', '')
                                 x, y = place.get('x', ''), place.get('y', '')
                                 if x and y:
-                                    info = f"{r.get('name','')}|{r.get('address','')}|{r.get('phone','')}|{r.get('category','')}|{r.get('kakaoUrl','')}"
+                                    card_num = idx + 1  # 카드 번호 (1-based)
+                                    info = f"{r.get('name','')}|{r.get('address','')}|{r.get('phone','')}|{r.get('category','')}|{r.get('kakaoUrl','')}|{card_num}"
                                     enriched_coords.append(f"{y},{x},{info}")
                             else:
                                 r['kakaoUrl'] = ''

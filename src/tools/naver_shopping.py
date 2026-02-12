@@ -82,7 +82,7 @@ def search_naver_products(query: str, sort: str = "sim") -> str:
         네이버 쇼핑 상품 정보 (이름, 가격, 이미지, 구매 링크)
     """
     writer = get_stream_writer()
-    writer({"tool": "search_naver_products", "status": "네이버 쇼핑 검색 중..."})
+    writer({"tool": "search_naver_products", "status": "상품 검색 중..."})
 
     if sort not in ("asc", "dsc", "sim", "date"):
         sort = "asc"

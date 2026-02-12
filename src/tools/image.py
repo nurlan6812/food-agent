@@ -147,13 +147,12 @@ def search_food_by_image(image_source: str) -> str:
     searcher = get_searcher()
 
     # 1. 이미지 업로드
-    writer({"tool": "search_food_by_image", "status": "이미지 업로드 중..."})
+    writer({"tool": "search_food_by_image", "status": "이미지 분석 중..."})
     image_url = searcher.get_image_url(image_source)
     if not image_url:
         return f"이미지를 업로드할 수 없습니다: {image_source}"
 
     # 2. Google Lens 검색
-    writer({"tool": "search_food_by_image", "status": "Google Lens로 검색 중..."})
     result = searcher.search_with_combined(image_url)
 
     if "error" in result:
@@ -220,7 +219,7 @@ def search_food_by_image(image_source: str) -> str:
         output = search_text
     else:
         # vLLM/Qwen 등: 이미지를 볼 수 없으므로 Gemini API로 별도 분석
-        writer({"tool": "search_food_by_image", "status": "Gemini로 종합 분석 중..."})
+        writer({"tool": "search_food_by_image", "status": "결과 정리 중..."})
         output = _analyze_with_gemini(image_source, image_url, search_text)
 
     # 5. 썸네일 URL을 검색결과 번호와 함께 추가

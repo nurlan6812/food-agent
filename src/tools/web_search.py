@@ -64,7 +64,7 @@ def web_search(query: str) -> str:
         웹 검색 결과 요약
     """
     writer = get_stream_writer()
-    writer({"tool": "web_search", "status": "웹 검색 중..."})
+    writer({"tool": "web_search", "status": "생각하는 중..."})
 
     searcher = get_searcher()
     search_result = searcher.search_text(query)
@@ -86,7 +86,7 @@ def web_search(query: str) -> str:
         if snippet:
             output.append(f"\n[요약]\n{snippet}")
 
-    writer({"tool": "web_search", "status": "검색 결과 분석 중..."})
+    writer({"tool": "web_search", "status": "정리하는 중..."})
 
     # 상위 3개 결과 크롤링
     for i, item in enumerate(organic[:3], 1):

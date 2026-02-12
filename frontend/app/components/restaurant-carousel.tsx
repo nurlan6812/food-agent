@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { RestaurantCardInfo } from '@/lib/types';
+import { MARKER_COLORS } from './map-embed';
 
 interface RestaurantCarouselProps {
   restaurants: RestaurantCardInfo[];
@@ -76,7 +77,10 @@ export function RestaurantCarousel({ restaurants }: RestaurantCarouselProps) {
             <div className="px-4 pt-4 pb-4 flex-1 flex flex-col">
               {/* 번호 + 이름 */}
               <div className="flex items-start gap-2.5 mb-2">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#E02020] text-white text-xs font-bold flex items-center justify-center">
+                <span
+                  className="flex-shrink-0 w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center"
+                  style={{ backgroundColor: MARKER_COLORS[idx % MARKER_COLORS.length] }}
+                >
                   {idx + 1}
                 </span>
                 <h4 className="text-base font-bold text-[#212121] leading-tight">{restaurant.name}</h4>

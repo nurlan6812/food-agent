@@ -27,7 +27,7 @@ def search_restaurant_info(query: str, page: int = 1) -> str:
         식당 정보 (이름, 주소, 전화번호, 카테고리, 메뉴, 가격)
     """
     writer = get_stream_writer()
-    writer({"tool": "search_restaurant_info", "status": "카카오맵 검색 중..."})
+    writer({"tool": "search_restaurant_info", "status": "식당 검색 중..."})
 
     kakao = get_kakao()
     result = kakao.search_restaurant(query, page=page)
@@ -61,7 +61,7 @@ def search_restaurant_info(query: str, page: int = 1) -> str:
             y = place.get('y', '')
             short_category = category.split(' > ')[-1] if category else ''
             if x and y:
-                info = f"{name}|{address}|{phone}|{short_category}|{place_url}"
+                info = f"{name}|{address}|{phone}|{short_category}|{place_url}|{i}"
                 coords_list.append(f"{y},{x},{info}")
 
     if coords_list:
@@ -70,14 +70,14 @@ def search_restaurant_info(query: str, page: int = 1) -> str:
 
     menu_text = ""
     if place_id and PLAYWRIGHT_AVAILABLE:
-        writer({"tool": "search_restaurant_info", "status": "메뉴 정보 수집 중..."})
+        writer({"tool": "search_restaurant_info", "status": "메뉴 확인 중..."})
         menu_text = kakao.get_menu_via_playwright(place_id)
 
     if menu_text:
         output.append("[메뉴판]")
         output.append(menu_text)
     else:
-        writer({"tool": "search_restaurant_info", "status": "메뉴 검색 중..."})
+        writer({"tool": "search_restaurant_info", "status": "메뉴 확인 중..."})
         menu_info = kakao.search_menu_via_serper(query)
         if menu_info:
             output.append("[메뉴 검색 결과]")

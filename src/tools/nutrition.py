@@ -78,7 +78,7 @@ def get_nutrition_info(query: str) -> str:
     if not organic:
         return f"'{query}' 검색 결과가 없습니다."
 
-    writer({"tool": "get_nutrition_info", "status": f"검색 결과 {len(organic)}개 분석 중..."})
+    writer({"tool": "get_nutrition_info", "status": "영양 정보 정리 중..."})
 
     output = [f"[검색: {query}]"]
 
@@ -93,6 +93,6 @@ def get_nutrition_info(query: str) -> str:
             output.append(f"출처: {link}")
             output.append(content)
 
-    writer({"tool": "get_nutrition_info", "status": "분석 완료!"})
+    writer({"tool": "get_nutrition_info", "status": "완료"})
 
     return "\n".join(output)
