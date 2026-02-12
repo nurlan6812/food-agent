@@ -353,36 +353,187 @@ cd frontend/app && npm run dev
 
 ---
 
-## 배포
+## 새 서버에서 처음부터 설정
 
-### 프로덕션 실행
+### 1. 시스템 요구사항
+
+- Python 3.10+
+- Node.js 18+
+- Git
+
+```bash
+# Ubuntu/Debian 기준
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv nodejs npm git
+```
+
+### 2. 프로젝트 클론 및 설치
+
+```bash
+git clone https://github.com/nurlan6812/food-agent.git
+cd food-agent
+chmod +x setup.sh run_all.sh
+./setup.sh
+```
+
+### 3. API 키 입력
+
+```bash
+nano .env
+```
+
+최소 필수 3개만 입력하면 동작합니다:
+```env
+GOOGLE_API_KEY=...       # https://aistudio.google.com/app/apikey
+SERPER_API_KEY=...       # https://serper.dev/
+KAKAO_API_KEY=...        # https://developers.kakao.com/
+NEXT_PUBLIC_KAKAO_JS_KEY=...  # 카카오 JavaScript 키 (지도용)
+```
+
+### 4. 실행
+
+```bash
+# 개발 모드 (핫 리로드)
+./run_all.sh
+
+# 또는 개별 실행
+python -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000  # 백엔드
+cd frontend/app && npm run dev  # 프론트엔드
+```
+
+- 프론트엔드: http://localhost:3000
+- 백엔드 API: http://localhost:8000
+
+### 5. 프로덕션 실행
 
 ```bash
 # 백엔드
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
 
-# 프론트엔드
+# 프론트엔드 빌드 후 실행
 cd frontend/app
 npm run build
 npx next start -p 3000 --hostname 0.0.0.0
 ```
 
-### Cloudflare Tunnel (HTTPS)
+### 6. 문제 해결
 
 ```bash
-cloudflared tunnel --config ~/.cloudflared/config.yml run
+# Playwright 브라우저 설치 실패 시
+playwright install-deps    # Linux 시스템 의존성
+playwright install chromium
+
+# 환경변수 로드 확인
+python -c "from dotenv import load_dotenv; import os; load_dotenv(); print(os.getenv('GOOGLE_API_KEY'))"
+
+# API 상태 확인
+curl http://localhost:8000/
+```
+
+---
+
+## Cloudflare Tunnel로 HTTPS 배포
+
+외부에서 접속할 수 있도록 Cloudflare Tunnel을 설정하는 방법입니다. 공유기 포트포워딩 없이 HTTPS를 제공합니다.
+
+### 1. Cloudflare 사전 준비
+
+- [Cloudflare](https://dash.cloudflare.com/) 계정 생성
+- 도메인을 Cloudflare DNS에 등록 (네임서버 변경 필요)
+
+### 2. cloudflared 설치
+
+```bash
+# Debian/Ubuntu
+curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared.deb
+
+# 또는 ARM64 (라즈베리파이 등)
+curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb
+sudo dpkg -i cloudflared.deb
+```
+
+### 3. Cloudflare 로그인 및 터널 생성
+
+```bash
+# 브라우저에서 Cloudflare 로그인 (인증 URL이 출력됨)
+cloudflared tunnel login
+
+# 터널 생성
+cloudflared tunnel create food-agent
+
+# 터널 ID 확인 (출력된 UUID를 메모)
+cloudflared tunnel list
+```
+
+### 4. 설정 파일 작성
+
+```bash
+mkdir -p ~/.cloudflared
+nano ~/.cloudflared/config.yml
 ```
 
 ```yaml
-# ~/.cloudflared/config.yml
-tunnel: your-tunnel-id
+tunnel: your-tunnel-id   # 위에서 메모한 UUID
+credentials-file: /home/your-user/.cloudflared/your-tunnel-id.json
+
 ingress:
+  # 프론트엔드 (메인 도메인)
   - hostname: food.yourdomain.com
     service: http://localhost:3000
-  - hostname: api.yourdomain.com
+
+  # 백엔드 API (서브도메인)
+  - hostname: api-food.yourdomain.com
     service: http://localhost:8000
+
+  # 나머지 요청은 404
   - service: http_status:404
 ```
+
+### 5. Cloudflare DNS에 CNAME 등록
+
+```bash
+cloudflared tunnel route dns food-agent food.yourdomain.com
+cloudflared tunnel route dns food-agent api-food.yourdomain.com
+```
+
+### 6. 터널 실행
+
+```bash
+# 포그라운드 실행 (테스트용)
+cloudflared tunnel --config ~/.cloudflared/config.yml run
+
+# 시스템 서비스로 등록 (서버 재시작 시 자동 실행)
+sudo cloudflared service install
+sudo systemctl enable cloudflared
+sudo systemctl start cloudflared
+```
+
+### 7. 프론트엔드 API URL 변경
+
+`.env`에서 백엔드 URL을 터널 도메인으로 변경:
+```env
+NEXT_PUBLIC_API_URL=https://api-food.yourdomain.com
+```
+
+프론트엔드 재빌드 후 확인:
+```bash
+cd frontend/app && npm run build && npx next start -p 3000 --hostname 0.0.0.0
+```
+
+### 8. CORS 설정 업데이트
+
+`api/main.py`의 `allow_origins`에 프론트엔드 도메인 추가:
+```python
+allow_origins=[
+    "https://food.yourdomain.com",
+    "http://localhost:3000",
+]
+```
+
+이제 `https://food.yourdomain.com`으로 접속할 수 있습니다.
+
+---
 
 ### PWA 모바일 설치
 
@@ -398,6 +549,18 @@ ingress:
 - CORS: 프로덕션 도메인만 허용
 - AI kakaoUrl 날조 방지: 카카오 재검색으로 항상 검증
 - Serper 검색 결과 날짜 표시: 오래된 가격 정보 안내
+
+---
+
+## Supabase (미연동)
+
+`src/db/`, `src/tools/save_image.py`, `src/tools/update_image.py`, `docs/supabase_schema.sql`에 Supabase 연동 코드가 준비되어 있으나 현재는 사용하지 않습니다. 향후 이미지 저장, 사용자 데이터 등에 활용할 예정입니다.
+
+연동 시 필요한 환경 변수:
+```env
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
 ---
 

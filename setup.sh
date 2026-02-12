@@ -58,26 +58,17 @@ if [ ! -f .env ]; then
     echo "   - GOOGLE_API_KEY (필수)"
     echo "   - SERPER_API_KEY (필수)"
     echo "   - KAKAO_API_KEY (필수)"
-    echo "   - SUPABASE_URL (필수)"
-    echo "   - SUPABASE_ANON_KEY (필수)"
     echo ""
 else
     echo "✅ .env 파일이 이미 존재합니다."
     echo ""
 fi
 
-# 6. Supabase 테이블 안내
-echo "📊 Supabase 데이터베이스 설정:"
-echo "   Supabase 프로젝트의 SQL Editor에서 다음 파일을 실행하세요:"
-echo "   → docs/supabase_schema.sql"
-echo ""
-
 # 완료
 echo "✅ 설치가 완료되었습니다!"
 echo ""
 echo "다음 단계:"
 echo "1. .env 파일에 API 키 입력"
-echo "2. Supabase에서 docs/supabase_schema.sql 실행"
-echo "3. ./run_all.sh 로 서버 시작"
+echo "2. ./run_all.sh 로 서버 시작"
 echo ""
 echo "문제가 있으면 README.md를 참고하세요."
